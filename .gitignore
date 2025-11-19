@@ -1,2 +1,140 @@
-.env
+# ============================================================
+#   PROJECT: Multi-Hop RAG Evaluation
+#   PURPOSE: Prevent committing heavy artifacts, credentials,
+#            caches, and temp files.
+# ============================================================
+
+#############################
+# OS-SPECIFIC JUNK
+#############################
+.DS_Store
+Thumbs.db
+
+
+#############################
+# PYTHON / VENV
+#############################
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.p
+*.pickle
+
+# virtual environments
+venv/
+env/
+.venv/
+
+# pip cache
+pip-wheel-metadata/
+
+
+#############################
+# JUPYTER NOTEBOOKS
+#############################
+.ipynb_checkpoints/
+
+
+#############################
+# IDE / EDITOR
+#############################
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+#############################
+# LOGS & TEMP
+#############################
+logs/
+*.log
+*.tmp
+*.temp
+
+
+#############################
+# DATASETS (LARGE)
+#############################
+data/
+datasets/
+*.jsonl
+*.json.gz
+*.csv
+*.tsv
+
+# HuggingFace cached datasets
+~/.cache/huggingface/datasets/
+.cache/huggingface/
+huggingface_cache/
+
+
+#############################
+# MODEL WEIGHTS
+#############################
+models/*.bin
+models/*.pt
+models/*.pth
+models/checkpoints/
+checkpoints/
+
+# Transformers cache
+~/.cache/huggingface/transformers/
+.cache/transformers/
+
+
+#############################
+# VECTOR STORES & INDEXES
+#############################
 faiss_hotpotqa/
+faiss_musique/
+faiss_2wikimhqa/
+*.faiss
+*.index
+*.npy
+*.npz
+
+
+#############################
+# EMBEDDINGS / DOCSTORES
+#############################
+embeddings/
+docstore/
+*.pkl
+*.pickle
+
+
+#############################
+# LOCAL ENV & SECRETS
+#############################
+.env
+.env.*
+*.key
+*.pem
+*.token
+
+
+#############################
+# GENERATED REPORTS
+#############################
+*.pdf
+*.aux
+*.out
+*.toc
+*.bbl
+*.blg
+*.lof
+*.lot
+
+
+#############################
+# MISC
+#############################
+tmp/
+cache/
+output/
+results/
+experiment_runs/
+
