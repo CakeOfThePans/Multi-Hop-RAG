@@ -20,7 +20,7 @@ class FaissRetriever:
         self,
         dataset_name: str,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
-        base_dir: str = ".",
+        base_dir: str = "/vector_stores",
     ):
         """
         dataset_name: one of ["hotpot_fullwiki", "musique", "2wiki"]
@@ -64,7 +64,8 @@ class FaissRetriever:
 # ====================================================================
 
 def build_faiss_index(
-    chunks,
+    texts,
+    metas,
     output_dir: str,
     embedding_model_name: str = "BAAI/bge-large-en-v1.5",
 ):
@@ -86,35 +87,9 @@ def build_faiss_index(
         model_name=embedding_model_name,
         model_kwargs={"device": device},
         encode_kwargs={"normalize_embeddings": True},
+        show_progress=True
     )
 
-    texts = []
-    metas = []
-
-    for c in chunks:
-
-        # (text, metadata)
-        if isinstance(c, tuple) and len(c) == 2:
-            text, meta = c
-            texts.append(str(text))
-            metas.append(meta if isinstance(meta, dict) else {})
-
-        # {"text": ..., "metadata": ...}
-        elif isinstance(c, dict):
-            texts.append(str(c.get("text", "")))
-            metas.append(c.get("metadata", {}))
-
-        # raw text
-        elif isinstance(c, str):
-            texts.append(c)
-            metas.append({})
-
-        else:
-            raise ValueError(
-                f"❌ Unsupported chunk format {type(c)}: {c}"
-            )
-
-    print(f"[FAISS Builder] Normalized {len(texts)} chunks.")
     print(f"[FAISS Builder] Encoding… this may take a while.")
 
     vector_store = FAISS.from_texts(

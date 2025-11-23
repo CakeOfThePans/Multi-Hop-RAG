@@ -36,41 +36,43 @@ def load_hotpot_fullwiki():
 
 
 def load_musique():
-    print("Loading MuSiQue (full_v1)…")
-    ds = load_dataset("musique", "full_v1")["train"]
+    print("Loading MuSiQue…")
+    ds_train = load_dataset("dgslibisey/MuSiQue", split="train")
+    ds_val = load_dataset("dgslibisey/MuSiQue", split="validation")
 
     corpus = []
     seen = set()
 
-    for row in ds:
-        for p in row["paragraphs"]:
-            title = p["title"]
-            text = " ".join(p["sentences"])
-            key = (title.lower(), text.lower())
-            if key not in seen:
-                seen.add(key)
-                corpus.append({"title": title, "text": text})
+    for split in [ds_train, ds_val]:
+        for row in split:
+            for paragraph in row["paragraphs"]:
+                key = (paragraph["title"].lower(), paragraph["paragraph_text"].lower())
+                if key not in seen:
+                    seen.add(key)
+                    corpus.append({"title": paragraph["title"], "text": paragraph["paragraph_text"]})
 
-    print(f"Collected {len(corpus)} MuSiQue paragraphs.")
+    print(f"Collected {len(corpus)} paragraphs from MuSiQue.")
     return corpus
 
 
 def load_2wiki():
-    print("Loading 2WikiMultiHopQA (main)…")
-    ds = load_dataset("2wikimultihopqa", "main")["train"]
+    print("Loading 2WikiMultiHopQA…")
+    ds_train = load_dataset("framolfese/2WikiMultihopQA", split="train")
+    ds_val = load_dataset("framolfese/2WikiMultihopQA", split="validation")
 
     corpus = []
     seen = set()
 
-    for row in ds:
-        for title, sentences in row["context"]:
-            text = " ".join(sentences)
-            key = (title.lower(), text.lower())
-            if key not in seen:
-                seen.add(key)
-                corpus.append({"title": title, "text": text})
+    for split in [ds_train, ds_val]:
+        for row in split:
+            for title, sents in zip(row["context"]["title"], row["context"]["sentences"]):
+                text = " ".join(sents)
+                key = (title.lower(), text.lower())
+                if key not in seen:
+                    seen.add(key)
+                    corpus.append({"title": title, "text": text})
 
-    print(f"Collected {len(corpus)} 2Wiki paragraphs.")
+    print(f"Collected {len(corpus)} paragraphs from 2WikiMultiHopQA.")
     return corpus
 
 
@@ -81,9 +83,9 @@ def load_2wiki():
 def select_dataset():
     print("\n=== VECTOR STORE BUILDER ===")
     print("Select dataset to embed:\n")
-    print("[1] HotpotQA – fullwiki")
-    print("[2] MuSiQue – full_v1")
-    print("[3] 2WikiMultiHopQA – main")
+    print("[1] HotpotQA")
+    print("[2] MuSiQue")
+    print("[3] 2WikiMultiHopQA")
     print("[0] Cancel\n")
 
     choice = input("Enter selection: ").strip()
@@ -117,12 +119,12 @@ def main():
 
     # 2. Chunk corpus
     print("\nChunking corpus…")
-    chunks = chunk_corpus(corpus)
+    texts, metas = chunk_corpus(corpus)
 
     # 3. Build FAISS index
     print("\nBuilding FAISS vector store…")
     output_dir = os.path.join("vector_stores", f"faiss_{ds_name}")
-    build_faiss_index(chunks, output_dir=output_dir)
+    build_faiss_index(texts, metas, output_dir=output_dir)
 
     elapsed = time.time() - start
     print(f"\n✔ DONE — Vector store built for: {ds_name}")
