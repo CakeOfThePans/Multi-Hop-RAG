@@ -91,7 +91,7 @@ def select_dataset():
     choice = input("Enter selection: ").strip()
 
     if choice == "1":
-        return "hotpot_fullwiki", load_hotpot_fullwiki
+        return "hotpot", load_hotpot_fullwiki
     elif choice == "2":
         return "musique", load_musique
     elif choice == "3":

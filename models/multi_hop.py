@@ -105,7 +105,7 @@ class MultiHopQA:
                 composed_q = subq
 
             retrieved_docs = self.retriever.similarity_search(composed_q, k=k)
-            passages = [d.page_content for d in retrieved_docs][: self.max_docs_per_hop]
+            passages = [d.page_content for d in retrieved_docs][:self.max_docs_per_hop]
 
             ans = self._answer_subq(question, subq, passages, hops)
 

@@ -4,9 +4,8 @@ from typing import List, Dict
 # ---------- Single-hop prompts ----------
 
 SINGLE_HOP_SYSTEM_PROMPT = (
-    "You are a precise QA assistant. Return just the short answer phrase with no explanation, "
-    "and no full sentences. If you are COMPLETELY UNSURE of the answer based on the provided "
-    "passages, respond with 'Unknown'."
+    "You are a precise QA assistant. Return just the short answer phrase with no explanation, and no full sentences."
+    "If you are COMPLETELY UNSURE of the answer based on the provided passages, respond with 'Unknown'."
 )
 
 
@@ -91,14 +90,10 @@ def build_final_answer_prompt(original_question: str, hops: List[Dict]) -> str:
     ctx = "\n\n".join(support)
     
     return (
-        "Using the prior sub-questions and their answers along with the supporting context, "
-        "answer the ORIGINAL QUESTION.\n"
-        "The sub-questions have been designed to help you arrive at the final answer step-by-step "
-        "but may obtain unnecessary details.\n"
-        "If the sub-question answers do not provide enough information to answer the original "
-        "question, you may disregard them and use only the context.\n"
-        "The final answer should be concise and directly address the original question, "
-        "not the sub-questions.\n"
+        "Using the prior sub-questions and their answers along with the supporting context, answer the ORIGINAL QUESTION.\n"
+        "The sub-questions have been designed to help you arrive at the final answer step-by-step but may obtain unnecessary details.\n"
+        "If the sub-question answers do not provide enough information to answer the original question, you may disregard them and use only the context.\n"
+        "The final answer should be concise and directly address the original question, not the sub-questions.\n"
         "If presented with a yes or no question, answer with just 'yes' or 'no'.\n"
         f"ORIGINAL QUESTION:\n{original_question}\n\n"
         f"SUB-QUESTION ANSWERS:\n{mem_lines}\n\n"

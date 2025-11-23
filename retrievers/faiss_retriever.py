@@ -20,15 +20,15 @@ class FaissRetriever:
         self,
         dataset_name: str,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
-        base_dir: str = "/vector_stores",
+        index_dir: str = "/vector_stores",
     ):
         """
-        dataset_name: one of ["hotpot_fullwiki", "musique", "2wiki"]
+        dataset_name: one of ["hotpot", "musique", "2wiki"]
         base_dir: directory where faiss_<dataset_name>/ folders live.
         """
 
         self.dataset_name = dataset_name.lower()
-        self.index_path = os.path.join(base_dir, f"faiss_{self.dataset_name}")
+        self.index_path = os.path.join(index_dir, f"faiss_{self.dataset_name}")
 
         if not os.path.exists(self.index_path):
             raise FileNotFoundError(
