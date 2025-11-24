@@ -22,12 +22,13 @@ class MultiHopQA:
       - final answer synthesis
     """
 
-    def __init__(self, retriever, chat_model: str = "gpt-4o-mini", temperature: float = 0.0, max_hops: int = 3, max_docs_per_hop: int = 3):
+    def __init__(self, retriever, chat_model: str = "gpt-4o-mini", temperature: float = 0.0, max_hops: int = 3, max_docs_per_hop: int = 3, verbose: bool = False):
         self.retriever = retriever
         self.llm = ChatOpenAI(model=chat_model, temperature=temperature)
         self.max_hops = max_hops
         self.max_docs_per_hop = max_docs_per_hop
         self.decomposer = self._make_decomposer(max_subqs=max_hops)
+        self.verbose = verbose
 
     # ---------- Decomposition ----------
 
@@ -119,4 +120,17 @@ class MultiHopQA:
             )
 
         final_answer = self._get_final_answer(question, hops)
+
+        if self.verbose:
+            print("Question:", question)
+            for i, h in enumerate(hops):
+                print(f"Sub-question {i + 1}: {h['subq']}")
+                print(f"Composed Query: {h['composed']}")
+                for j, p in enumerate(h['passages']):
+                    print(f"Passage {j + 1}:\n{p}\n")
+                print(f"Answer: {h['answer']}\n")
+
+            print("Original Question:", question)
+            print("Predicted Answer:", final_answer) 
+
         return final_answer
