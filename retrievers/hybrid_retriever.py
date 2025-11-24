@@ -1,17 +1,16 @@
 from typing import List, Tuple, Dict, Any
 from langchain_core.documents import Document
 
-from retrievers.faiss_retriever import FaissHotpotRetriever
-from retrievers.bm25_retriever import BM25HotpotRetriever
+from retrievers.faiss_retriever import FaissRetriever
+from retrievers.bm25_retriever import BM25Retriever
 
-
-class HybridHotpotRetriever:
+class HybridRetriever:
     """
     Hybrid retriever that fuses FAISS (dense) and BM25 (sparse) results
     using Reciprocal Rank Fusion (RRF).
     """
 
-    def __init__(self, faiss_retriever: FaissHotpotRetriever, bm25_retriever: BM25HotpotRetriever, k_dense: int = 5, k_sparse: int = 5, k0: int = 60):
+    def __init__(self, faiss_retriever: FaissRetriever, bm25_retriever: BM25Retriever, k_dense: int = 5, k_sparse: int = 5, k0: int = 60):
         self.faiss_retriever = faiss_retriever
         self.bm25_retriever = bm25_retriever
         self.k_dense = k_dense

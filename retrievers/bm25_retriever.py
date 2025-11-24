@@ -3,7 +3,8 @@ from typing import List
 import json
 
 from langchain_core.documents import Document
-from langchain_community.retrievers import BM25Retriever
+from langchain_community.retrievers import BM25Retriever as BM25
+from utils.jsonl_utils import load_corpus_from_jsonl
 
 class BM25Retriever:
     """
@@ -15,7 +16,7 @@ class BM25Retriever:
     and indexing is nearly instant compared to dense embeddings.
     """
 
-    def __init__(self, dataset_name: str, corpus_dir: str = "corpora", k: int = 15):
+    def __init__(self, dataset_name: str, corpus_dir: str = "corpora", k: int = 5):
         self.dataset_name = dataset_name.lower()
         self.corpus_path = os.path.join(corpus_dir, f"{self.dataset_name}.jsonl")
 
@@ -27,24 +28,15 @@ class BM25Retriever:
             )
         print(f"[BM25 Retriever] Loading corpus from {self.corpus_path}...")
 
-        docs = []
-        with open(self.corpus_path, "r", encoding="utf-8") as f:
-            for line in f:
-                entry = json.loads(line)
-                docs.append(
-                    Document(
-                        page_content=entry["text"],
-                        metadata=entry.get("metadata", {}),
-                    )
-                )
+        docs = load_corpus_from_jsonl(self.corpus_path)
         print(f"[BM25 Retriever] Loaded {len(docs)} documents.")
 
-        self.retriever = BM25Retriever.from_documents(docs)
+        self.retriever = BM25.from_documents(docs)
         self.k = k
         self.retriever.k = k
 
         print(f"[BM25 Retriever] Ready with k={k}.")
 
     def similarity_search(self, query: str, k: int = 5) -> List[Document]:
-        docs = self.retriever.get_relevant_documents(query)
+        docs = self.retriever.invoke(query)
         return docs[:k]

@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 # Local imports
 from utils.chunking import chunk_corpus
+from utils.jsonl_utils import save_corpus_jsonl
 from retrievers.faiss_retriever import build_faiss_index
 
 load_dotenv()
@@ -121,7 +122,12 @@ def main():
     print("\nChunking corpus…")
     texts, metas = chunk_corpus(corpus)
 
-    # 3. Build FAISS index
+    # 3. Save corpus as jsonl
+    corpus_path = os.path.join("corpora", f"{ds_name}.jsonl")
+    save_corpus_jsonl(texts, metas, corpus_path)
+    print(f"Saved corpus in corpora/{ds_name}.jsonl")
+
+    # # 4. Build FAISS index
     print("\nBuilding FAISS vector store…")
     output_dir = os.path.join("vector_stores", f"faiss_{ds_name}")
     build_faiss_index(texts, metas, output_dir=output_dir)

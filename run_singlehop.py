@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 from datasets import load_dataset
 
 from retrievers.faiss_retriever import FaissRetriever
-# from retrievers.bm25_retriever import BM25Retriever
-# from retrievers.hybrid_retriever import HybridRetriever
+from retrievers.bm25_retriever import BM25Retriever
+from retrievers.hybrid_retriever import HybridRetriever
 
 from models.single_hop import SingleHopQA
 from utils.eval import evaluate_qa_system
@@ -35,16 +35,16 @@ def main():
     if retrieval_mode == "faiss":
         retriever = FaissRetriever(dataset_name, index_dir=index_dir)
 
-    # elif retrieval_mode == "bm25":
-    #     retriever = BM25Retriever(dataset_name)
+    elif retrieval_mode == "bm25":
+        retriever = BM25Retriever(dataset_name)
 
-    # elif retrieval_mode == "hybrid":
-    #     retriever = HybridRetriever(
-    #         FaissRetriever(dataset_name, index_dir=index_dir),
-    #         BM25Retriever(dataset_name),
-    #         k_dense=k_retrieve,
-    #         k_sparse=k_retrieve,
-    #     )
+    elif retrieval_mode == "hybrid":
+        retriever = HybridRetriever(
+            FaissRetriever(dataset_name, index_dir=index_dir),
+            BM25Retriever(dataset_name),
+            k_dense=k_retrieve,
+            k_sparse=k_retrieve,
+        )
 
     else:
         raise ValueError(f"Unknown RETRIEVAL_MODE: {retrieval_mode}")

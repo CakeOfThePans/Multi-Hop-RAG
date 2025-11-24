@@ -88,6 +88,7 @@ checkpoints/
 #############################
 # VECTOR STORES & INDEXES
 #############################
+corpora/
 vector_stores/
 faiss_hotpotqa/
 faiss_musique/
