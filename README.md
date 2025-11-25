@@ -7,7 +7,7 @@ It includes:
 - BM25 sparse retrieval
 - Hybrid retrieval (dense + sparse)
 - Single-hop and multi-hop pipelines
-- Evaluation (EM + F1)
+- Evaluation (EM + F1 + LLM Eval)
 - Support for multiple datasets (HotpotQA, MuSiQue, 2WikiMultiHopQA)
 
 ---
@@ -28,17 +28,19 @@ It includes:
 ├── utils/
 │   ├── chunking.py               # Corpus building + chunking
 │   ├── prompts.py                # All LLM prompts (single + multi-hop)
+│   ├── jsonl_utils.py            # Utilities functions to handle jsonl files for BM25
 │   └── eval.py                   # EM/F1 evaluation functions
 │
 ├── run_singlehop.py              # CLI runner for single-hop evaluation
 ├── run_multihop.py               # CLI runner for multi-hop evaluation
+├── reasoning_trace_comparison.py # CLI runner for single question comparison using both models
 ├── build_vector_store.py         # Dataset loading
 │
 ├── requirements.txt
 └── README.md
 ```
 
-Helper utilities such as `scripts/build_vector_store.py` construct FAISS indices; running them will create directories like `faiss_hotpot_fullwiki/`, `faiss_musique/`, and `faiss_2wiki/`.
+Helper utilities such as `build_vector_store.py` construct FAISS indices; running them will create directories like `faiss_hotpot/`, `faiss_musique/`, and `faiss_2wiki/`, along with their respective corpus jsonl files.
 
 ---
 
@@ -60,9 +62,11 @@ OPENAI_API_KEY=your_key_here
 
 ---
 
-## Step 1 — Build a Vector Store (one time per dataset)
+## Step 1 — Build a Vector Store and Save Corpus (one time per dataset)
 
 FAISS vector stores are expensive to generate, so this step is only needed once per dataset.
+
+While building the vector store, the script will also save the cleaned + deduplicated corpus in JSONL format for later use with BM25.
 
 Run:
 
@@ -74,9 +78,9 @@ You will be prompted:
 
 ```
 Select dataset to build vector store:
-[1] HotpotQA – fullwiki
-[2] MuSiQue – full_v1
-[3] 2WikiMultiHopQA – main
+[1] HotpotQA
+[2] MuSiQue
+[3] 2WikiMultiHopQA
 
 Enter choice:
 ```
@@ -84,10 +88,21 @@ Enter choice:
 This will generate:
 
 ```
-faiss_hotpot_fullwiki/
-faiss_musique/
-faiss_2wiki/
+.
+├── vector_stores/
+│   ├── faiss_hotpot/
+│   ├── faiss_musique/
+│   └── faiss_2wiki.py/
+│
+├── corpora/
+│   ├── hotpot.jsonl
+│   ├── musique.jsonl
+│   └── 2wiki.jsonl
 ```
+
+- The vector_store/ folder contains the FAISS index and associated metadata for each dataset.
+
+- The corpora/ folder contains one JSONL corpus file per dataset (each line = one paragraph with metadata), ready for BM25.
 
 After this, you do **not** need to rebuild unless you change embeddings or chunking logic.
 
@@ -95,82 +110,71 @@ After this, you do **not** need to rebuild unless you change embeddings or chunk
 
 ## Step 2 — Run Single-Hop or Multi-Hop Inference
 
-These scripts load an existing FAISS index and run predictions (no metrics).
+These scripts load an existing FAISS index and run predictions with evaluation metrics
 
 Single-hop inference:
 
 ```bash
-python models/single_hop.py --dataset hotpot
+python run_singlehop.py
 ```
 
 Multi-hop inference:
 
 ```bash
-python models/multi_hop.py --dataset hotpot
-```
-
-Supported datasets:
-
-- `hotpot`
-- `musique`
-- `2wiki`
-
-Examples:
-
-```bash
-python models/multi_hop.py --dataset musique
-python models/single_hop.py --dataset 2wiki
-```
-
----
-
-## Step 3 — Run Evaluation (EM / F1)
-
-To compute metrics, use:
-
-```bash
-python utils/eval.py --model single --dataset hotpot --n 100
-```
-
-or:
-
-```bash
-python utils/eval.py --model multi --dataset hotpot --n 100
+python run_multihop.py
 ```
 
 Arguments:
 
-| Flag | Meaning |
-|------|---------|
-| `--model single/multi` | choose pipeline |
-| `--dataset hotpot/musique/2wiki` | choose dataset |
-| `--n 100` | number of validation samples to test |
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `--retrieval_mode faiss/bm25/hybrid` | choose retrieval mode | faiss |
+| `--dataset_name hotpot/musique/2wiki` | choose dataset | hotpot |
+| `--k_retrieve (1-10)` | number of chunks to use as context | 5 |
+| `--n (up to max size of validation set)` | number of validation samples to test | 100 |
+| `--index_dir (path)` | path to faiss index folder (keep as default unless changed) | vector_stores |
 
 Example full run:
 
 ```bash
-python utils/eval.py --model multi --dataset musique --n 150
+python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10
+```
+
+---
+
+## Step 3 (Optional) — Compare single-hop and multi-hop on a single example
+
+These scripts allow you to compare single-hop and multi-hop models on a single example in verbose mode
+
+Comparison:
+
+```bash
+python reasoning_trace_comparison.py
+```
+
+Arguments:
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `--retrieval_mode faiss/bm25/hybrid` | choose retrieval mode | faiss |
+| `--dataset_name hotpot/musique/2wiki` | choose dataset | hotpot |
+| `--k_retrieve (1-10)` | number of chunks to use as context | 5 |
+| `--question_idx (up to max size of validation set)` | question index to test | 4 |
+| `--index_dir (path)` | path to faiss index folder (keep as default unless changed) | vector_stores |
+
+Example full run:
+
+```bash
+python reasoning_trace_comparison.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --question_idx 4
 ```
 
 ---
 
 ## Retrieval Modes
 
-Select the retrieval backend via environment variable:
-
-```
-RETRIEVAL_MODE=faiss      # dense retrieval (default)
-RETRIEVAL_MODE=bm25       # sparse retrieval
-RETRIEVAL_MODE=hybrid     # RRF fusion (FAISS + BM25)
-```
-
-Example:
-
-```bash
-export RETRIEVAL_MODE=hybrid
-```
-
-Hybrid mode uses Reciprocal Rank Fusion to merge dense and sparse signals.
+- **faiss** — dense retrieval (default)
+- **bm25** — sparse retrieval
+- **hybrid** — RRF fusion using FAISS + BM25
 
 ---
 
@@ -199,15 +203,13 @@ This baseline establishes performance without intermediate decomposition.
 
 ## Vector Store Persistence
 
-- **FAISS retriever**: stored on disk (e.g., `faiss_hotpot_fullwiki/`) to avoid re-embedding hundreds of thousands of chunks each run.
-- **BM25 retriever**: builds an in-memory inverted index; if memory is tight, restrict the dataset subset before indexing.
+- **FAISS retriever**: stored on disk (e.g., `vector_stores/<dataset_name>`) to avoid re-embedding hundreds of thousands of chunks each run.
+- **BM25 retriever**: stores the corpus as a `.jsonl` file inside `corpora/<dataset_name>.jsonl`, which is loaded at runtime to build the BM25 index.
 
 ---
 
-## Evaluation Utilities
+## Evaluation Metrics
 
-`utils/eval.py` provides:
-
-- `exact_match_score()`
-- `f1_score()`
-- `evaluate_qa_system()`
+- **Exact Match (EM)** — measures whether the model's answer matches the ground-truth string exactly.
+- **F1 Score** — token-level overlap metric that balances precision and recall.
+- **LLM-based Evaluator** — uses a large language model to judge answer correctness based on semantics rather than surface form.
