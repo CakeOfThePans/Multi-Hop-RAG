@@ -1,10 +1,11 @@
+import argparse
 import os
 from dotenv import load_dotenv
 from datasets import load_dataset
 
 from retrievers.faiss_retriever import FaissRetriever
-# from retrievers.bm25_retriever import BM25Retriever
-# from retrievers.hybrid_retriever import HybridRetriever
+from retrievers.bm25_retriever import BM25Retriever
+from retrievers.hybrid_retriever import HybridRetriever
 
 from models.single_hop import SingleHopQA
 from models.multi_hop import MultiHopQA
@@ -23,26 +24,34 @@ def load_validation_set(name: str):
 
 def main():
     load_dotenv()
+    parser = argparse.ArgumentParser()
 
-    retrieval_mode = os.getenv("RETRIEVAL_MODE", "faiss") # faiss, bm25, hybrid
-    dataset_name = os.getenv("DATASET_NAME", "hotpot") # hotpot, musique, 2wiki
-    k_retrieve = int(os.getenv("K_RETRIEVE", 5))
-    question_idx = int(os.getenv("QUESTION_IDX", 4)) # question 5 for the hotpotqa dataset is a good example
-    index_dir = os.getenv("INDEX_DIR", "vector_stores")
+    parser.add_argument("--retrieval_mode", type=str, default="faiss")  # faiss, bm25, hybrid
+    parser.add_argument("--dataset_name", type=str, default="hotpot")   # hotpot, musique, 2wiki
+    parser.add_argument("--k_retrieve", type=int, default=5)
+    parser.add_argument("--question_idx", type=int, default=4)  # question 5 for the hotpotqa dataset is a good example
+    parser.add_argument("--index_dir", type=str, default="vector_stores")
+
+    args = parser.parse_args()
+    retrieval_mode = args.retrieval_mode
+    dataset_name = args.dataset_name
+    k_retrieve = args.k_retrieve
+    question_idx = args.question_idx
+    index_dir = args.index_dir
 
     if retrieval_mode == "faiss":
         retriever = FaissRetriever(dataset_name, index_dir=index_dir)
 
-    # elif retrieval_mode == "bm25":
-    #     retriever = BM25Retriever(dataset_name)
+    elif retrieval_mode == "bm25":
+        retriever = BM25Retriever(dataset_name)
 
-    # elif retrieval_mode == "hybrid":
-    #     retriever = HybridRetriever(
-    #         FaissRetriever(dataset_name, index_dir=index_dir),
-    #         BM25Retriever(dataset_name),
-    #         k_dense=k_retrieve,
-    #         k_sparse=k_retrieve,
-    #     )
+    elif retrieval_mode == "hybrid":
+        retriever = HybridRetriever(
+            FaissRetriever(dataset_name, index_dir=index_dir),
+            BM25Retriever(dataset_name),
+            k_dense=k_retrieve,
+            k_sparse=k_retrieve,
+        )
 
     else:
         raise ValueError(f"Unknown RETRIEVAL_MODE: {retrieval_mode}")

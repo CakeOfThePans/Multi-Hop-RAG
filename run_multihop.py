@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from datasets import load_dataset
+import argparse
 
 from retrievers.faiss_retriever import FaissRetriever
 from retrievers.bm25_retriever import BM25Retriever
@@ -22,12 +23,20 @@ def load_validation_set(name: str):
 
 def main():
     load_dotenv()
+    parser = argparse.ArgumentParser()
 
-    retrieval_mode = os.getenv("RETRIEVAL_MODE", "faiss")     # faiss, bm25, hybrid
-    dataset_name = os.getenv("DATASET_NAME", "hotpot")      # hotpot, musique, 2wiki
-    k_retrieve = int(os.getenv("K_RETRIEVE", 5))
-    n_eval = int(os.getenv("N_EVAL", 100))
-    index_dir = os.getenv("INDEX_DIR", "vector_stores")
+    parser.add_argument("--retrieval_mode", type=str, default="faiss")  # faiss, bm25, hybrid
+    parser.add_argument("--dataset_name", type=str, default="hotpot")   # hotpot, musique, 2wiki
+    parser.add_argument("--k_retrieve", type=int, default=5)
+    parser.add_argument("--n_eval", type=int, default=100)
+    parser.add_argument("--index_dir", type=str, default="vector_stores")
+
+    args = parser.parse_args()
+    retrieval_mode = args.retrieval_mode
+    dataset_name = args.dataset_name
+    k_retrieve = args.k_retrieve
+    n_eval = args.n_eval
+    index_dir = args.index_dir
 
     if retrieval_mode == "faiss":
         retriever = FaissRetriever(dataset_name, index_dir=index_dir)
