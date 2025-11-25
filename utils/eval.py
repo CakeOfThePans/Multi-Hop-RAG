@@ -1,9 +1,12 @@
+import json
 import re
 import string
 from collections import Counter
 from typing import Callable, Dict, Any
 from datasets import Dataset
-
+from langchain_openai import ChatOpenAI
+from utils.prompts import LLM_EVAL_SYSTEM_PROMPT, build_llm_eval_prompt
+from dotenv import load_dotenv
 
 def normalize_answer(s: str) -> str:
     def remove_articles(text):
@@ -45,6 +48,24 @@ def f1_score(prediction: str, ground_truth: str) -> float:
 def exact_match_score(prediction: str, ground_truth: str) -> float:
     return 1.0 if normalize_answer(prediction) == normalize_answer(ground_truth) else 0.0
 
+# LLM Evaluation
+load_dotenv()
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
+def llm_eval_score(question: str, gold_answer: str, model_answer: str) -> Dict[str, Any]:
+    user_prompt = build_llm_eval_prompt(question, gold_answer, model_answer)
+    resp = llm.invoke(
+        [
+            {"role": "system", "content": LLM_EVAL_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+    )
+
+    raw = resp.content.strip()
+    # parse the json
+    ans = json.loads(raw)
+    ans["score"] = float(ans["score"])
+
+    return ans
 
 def evaluate_qa_system(ds_val: Dataset, predict_fn: Callable[[str, int], str], n: int = 100, k: int = 5) -> Dict[str, Any]:
     """
@@ -52,7 +73,7 @@ def evaluate_qa_system(ds_val: Dataset, predict_fn: Callable[[str, int], str], n
     predict_fn(question, k) -> predicted answer (string)
     """
     idxs = list(range(min(n, len(ds_val))))
-    ems, f1s = [], []
+    ems, f1s, llm_evals = [], [], []
 
     for i in idxs:
         ex = ds_val[i]
@@ -67,6 +88,7 @@ def evaluate_qa_system(ds_val: Dataset, predict_fn: Callable[[str, int], str], n
 
         ems.append(exact_match_score(pred, ground_truth))
         f1s.append(f1_score(pred, ground_truth))
+        llm_evals.append(llm_eval_score(q, ground_truth, pred)["score"])
 
     m = len(idxs) if idxs else 1
     return {
@@ -74,4 +96,5 @@ def evaluate_qa_system(ds_val: Dataset, predict_fn: Callable[[str, int], str], n
         "k": k,
         "EM": sum(ems) / m,
         "F1": sum(f1s) / m,
+        "LLM Eval": sum(llm_evals) / m
     }

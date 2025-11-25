@@ -8,6 +8,7 @@ from retrievers.faiss_retriever import FaissRetriever
 
 from models.single_hop import SingleHopQA
 from models.multi_hop import MultiHopQA
+from utils.eval import f1_score, exact_match_score, llm_eval_score
 
 def load_validation_set(name: str):
     """Load the validation split for each dataset."""
@@ -77,12 +78,18 @@ def main():
 
     print("\n==================================================================")
     print("SINGLE-HOP RAG")
-    singlehop_model.predict(question, k=k_retrieve)
+    single_hop_pred = singlehop_model.predict(question, k=k_retrieve)
+    print("EM:", exact_match_score(single_hop_pred, answer))
+    print("F1:", f1_score(single_hop_pred, answer))
+    print("LLM Eval:", llm_eval_score(question, answer, single_hop_pred)["score"])
     print("==================================================================\n")
 
     print("\n==================================================================")
     print("MULTI-HOP RAG")
-    multihop_model.predict(question, k=k_retrieve)
+    multi_hop_pred = multihop_model.predict(question, k=k_retrieve)
+    print("EM:", exact_match_score(multi_hop_pred, answer))
+    print("F1:", f1_score(multi_hop_pred, answer))
+    print("LLM Eval:", llm_eval_score(question, answer, multi_hop_pred)["score"])
     print("==================================================================\n")
 
 if __name__ == "__main__":

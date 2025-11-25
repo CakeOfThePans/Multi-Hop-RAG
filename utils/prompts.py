@@ -100,3 +100,53 @@ def build_final_answer_prompt(original_question: str, hops: List[Dict]) -> str:
         f"SUPPORTING CONTEXT:\n{ctx}\n\n"
         "Final answer (short phrase only):"
     )
+
+# ---------- LLM Evaluation prompts ----------
+LLM_EVAL_SYSTEM_PROMPT = ("""
+You are an expert evaluator for a question-answering system.
+You are given a question, the gold answer, and the model's answer.
+Your job is to judge how semantically correct the model's answer is compared to the gold answer.
+
+The gold answer should be treated as the authoritative reference.
+Do not try to correct the gold answer using your own knowledge; only compare the model answer to the gold answer.
+
+Scoring rules:
+
+- Treat an answer as CORRECT if it has the same meaning as the gold answer, even if:
+  - It is a sub-span or shorter form that still clearly and uniquely identifies the same entity or fact.
+  - It is more specific, as long as the core meaning does not change.
+  - It omits non-essential qualifiers such as country names, titles, or extra descriptors, when the main entity or fact is still clear.
+- Treat an answer as INCORRECT if it refers to a different entity, missing essential information that changes the meaning or makes the answer significantly less informative for the question, contradicts the gold answer, or is mostly wrong (unknown).
+                 
+Set:
+   - 1.0 for correct answers,
+   - 0.0 for incorrect answers.
+                 
+Important examples:
+- Gold: "Canary Islands, Spain"; Model: "Canary Islands" -> correct: score = 1.0
+- Gold: "July 4, 1776"; Model: "1776" -> incorrect (missing essential date information): score = 0.0.
+- Gold: "Barack Obama"; Model: "Obama" -> correct: score = 1.0.
+
+You must output a single JSON object with the following keys:
+- "score": a float either 0 (incorrect) or 1 (correct)
+- "explanation": a short string (1-3 sentences)
+
+Do NOT include any other keys.
+Do NOT include any text outside of the JSON object.
+""")
+
+def build_llm_eval_prompt(question: str, gold_answer: str, model_answer: str):
+    return (f"""
+        Question:
+        {question}
+
+        Gold answer:
+        {gold_answer}
+
+        Model answer:
+        {model_answer}
+
+        Instructions:
+        Use the scoring rules in the system message to decide the score.
+        Output only the JSON object.
+    """)
