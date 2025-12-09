@@ -8,6 +8,11 @@ from langchain_openai import ChatOpenAI
 from utils.prompts import LLM_EVAL_SYSTEM_PROMPT, build_llm_eval_prompt
 from dotenv import load_dotenv
 from rouge_score import rouge_scorer
+from pydantic import BaseModel
+
+class EvalSchema(BaseModel):
+    score: float
+    explanation: str
 
 def normalize_answer(s):
     def remove_articles(text):
@@ -50,7 +55,7 @@ def exact_match_score(prediction, ground_truth):
     return 1.0 if normalize_answer(prediction) == normalize_answer(ground_truth) else 0.0
 
 load_dotenv()
-llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0.0)
+llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0.0).with_structured_output(EvalSchema)
 def llm_eval_score(question, gold_answer, model_answer):
     user_prompt = build_llm_eval_prompt(question, gold_answer, model_answer)
     resp = llm.invoke(
@@ -60,12 +65,7 @@ def llm_eval_score(question, gold_answer, model_answer):
         ]
     )
 
-    raw = resp.content.strip()
-    print(raw)
-    ans = json.loads(raw)
-    ans["score"] = float(ans["score"])
-
-    return ans
+    return {"score": resp.score, "explanation": resp.explanation}
 
 def evaluate_qa_system(ds_val, predict_fn, n = 100, k = 5):
 
