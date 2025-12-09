@@ -1,14 +1,17 @@
-## Multi-Hop Retrieval-Augmented Generation (RAG) Benchmarking
+# Multi-Hop Retrieval-Augmented Generation (RAG) Benchmarking
 
-This repository implements a modular, clean-architecture framework for evaluating single-hop and multi-hop RAG systems across multiple multi-hop QA datasets.  
-It includes:
+This repository provides a modular framework for evaluating single-hop and multi-hop Retrieval-Augmented Generation (RAG) systems across multiple multi-hop QA datasets.
 
-- FAISS vector retrieval
+It supports:
+
+- FAISS dense retrieval
 - BM25 sparse retrieval
-- Hybrid retrieval (dense + sparse)
-- Single-hop and multi-hop pipelines
-- Evaluation (EM + F1 + LLM Eval)
-- Support for multiple datasets (HotpotQA, MuSiQue, 2WikiMultiHopQA)
+- Hybrid retrieval (dense + sparse via RRF)
+- Cross-encoder reranking
+- Single-hop RAG
+- Multi-hop RAG with question decomposition
+- EM, F1, and LLM semantic evaluation
+- Datasets: HotpotQA, MuSiQue, and 2WikiMultiHopQA
 
 ---
 
@@ -17,42 +20,85 @@ It includes:
 ```
 .
 ├── retrievers/
-│   ├── faiss_retriever.py        # Dense vector search (FAISS)
-│   ├── bm25_retriever.py         # Sparse BM25 retrieval
-│   └── hybrid_retriever.py       # Dense + Sparse fusion via RRF
+│   ├── faiss_retriever.py          # Dense vector search (FAISS)
+│   ├── bm25_retriever.py           # Sparse BM25 retrieval
+│   ├── hybrid_retriever.py         # Dense + Sparse fusion via RRF
+│   └── reranker.py                 # Cross-encoder reranking
 │
 ├── models/
-│   ├── single_hop.py             # Standard single-hop RAG pipeline
-│   └── multi_hop.py              # Multi-hop RAG + decomposition pipeline
+│   ├── single_hop.py               # Standard single-hop RAG pipeline
+│   └── multi_hop.py                # Multi-hop RAG + decomposition pipeline
 │
 ├── utils/
-│   ├── chunking.py               # Corpus building + chunking
-│   ├── prompts.py                # All LLM prompts (single + multi-hop)
-│   ├── jsonl_utils.py            # Utilities functions to handle jsonl files for BM25
-│   └── eval.py                   # EM/F1 evaluation functions
+│   ├── chunking.py                 # Corpus building + chunking
+│   ├── prompts.py                  # All LLM prompts (single + multi-hop)
+│   ├── jsonl_utils.py              # Utilities for JSONL files (BM25)
+│   └── eval.py                     # EM/F1/LLM evaluation functions
 │
-├── run_singlehop.py              # CLI runner for single-hop evaluation
-├── run_multihop.py               # CLI runner for multi-hop evaluation
-├── reasoning_trace_comparison.py # CLI runner for single question comparison using both models
-├── build_vector_store.py         # Dataset loading
+├── run_singlehop.py                # CLI runner for single-hop evaluation
+├── run_multihop.py                 # CLI runner for multi-hop evaluation
+├── reasoning_trace_comparison.py   # Compare single vs multi-hop on one question
+├── build_vector_store.py           # Build FAISS index + JSONL corpus
+│
+├── corpora/                        # Auto-generated after building vector store
+├── vector_stores/                  # Auto-generated FAISS directories
 │
 ├── requirements.txt
 └── README.md
 ```
 
-Helper utilities such as `build_vector_store.py` construct FAISS indices; running them will create directories like `faiss_hotpot/`, `faiss_musique/`, and `faiss_2wiki/`, along with their respective corpus jsonl files.
+---
+
+## Required Dataset Downloads
+
+### 1. HotpotQA & MuSiQue
+These are automatically downloaded from HuggingFace — no action needed.
 
 ---
 
-## Setup
+### 2. 2WikiMultiHopQA (must be downloaded manually)
 
-### 1. Install dependencies
+The original 2Wiki dataset is no longer hosted on HuggingFace.  
+You must download it manually:
+
+Download link:  
+https://www.dropbox.com/scl/fi/heid2pkiswhfaqr5g0piw/data.zip?e=2&file_subpath=%2Fdata&rlkey=ira57daau8lxfj022xvk1irju
+
+Inside the ZIP you will find:
+
+```
+train.json
+dev.json
+test.json
+```
+
+Place them in a folder named exactly: `2wiki/`
+
+So your project root should look like:
+
+```
+.
+├── 2wiki/
+│   ├── train.json
+│   ├── dev.json
+│   └── test.json
+├── retrievers/
+├── models/
+├── utils/
+...
+```
+
+---
+
+## Setup Instructions
+
+### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Add your OpenAI API key
+### 2. Configure OpenAI API Key
 
 Create a `.env` file in the repo root:
 
@@ -62,16 +108,19 @@ OPENAI_API_KEY=your_key_here
 
 ---
 
-## Step 1 — Build a Vector Store and Save Corpus (one time per dataset)
+## Step 1 — Build Vector Stores (FAISS + JSONL)
 
-FAISS vector stores are expensive to generate, so this step is only needed once per dataset.
-
-While building the vector store, the script will also save the cleaned + deduplicated corpus in JSONL format for later use with BM25.
+This step:
+- Loads datasets
+- Cleans + deduplicates paragraphs
+- Chunks all documents
+- Saves JSONL corpus for BM25
+- Builds FAISS index for dense retrieval
 
 Run:
 
 ```bash
-python scripts/build_vector_store.py
+python build_vector_store.py
 ```
 
 You will be prompted:
@@ -81,60 +130,63 @@ Select dataset to build vector store:
 [1] HotpotQA
 [2] MuSiQue
 [3] 2WikiMultiHopQA
-
-Enter choice:
 ```
 
-This will generate:
+Afterwards, the repo will contain:
 
 ```
-.
-├── vector_stores/
-│   ├── faiss_hotpot/
-│   ├── faiss_musique/
-│   └── faiss_2wiki.py/
-│
-├── corpora/
-│   ├── hotpot.jsonl
-│   ├── musique.jsonl
-│   └── 2wiki.jsonl
+vector_stores/
+    faiss_hotpot/
+    faiss_musique/
+    faiss_2wiki/
+
+corpora/
+    hotpot.jsonl
+    musique.jsonl
+    2wiki.jsonl
 ```
 
-- The vector_store/ folder contains the FAISS index and associated metadata for each dataset.
-
-- The corpora/ folder contains one JSONL corpus file per dataset (each line = one paragraph with metadata), ready for BM25.
-
-After this, you do **not** need to rebuild unless you change embeddings or chunking logic.
+You only need to run this once per dataset unless you change embeddings or chunking size.
 
 ---
 
-## Step 2 — Run Single-Hop or Multi-Hop Inference
-
-These scripts load an existing FAISS index and run predictions with evaluation metrics
-
-Single-hop inference:
+## Step 2 — Run Single-Hop RAG
 
 ```bash
 python run_singlehop.py
 ```
 
-Multi-hop inference:
+### Arguments
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `--retrieval_mode` | `faiss` / `bm25` / `hybrid` | `faiss` |
+| `--dataset_name` | `hotpot` / `musique` / `2wiki` | `hotpot` |
+| `--k_retrieve` | Number of retrieved docs | `5` |
+| `--n_eval` | Number of validation samples | `100` |
+| `--index_dir` | Path to FAISS indexes | `vector_stores` |
+| `--rerank` | Enable cross-encoder reranking | `false` |
+
+### Example
+
+```bash
+python run_singlehop.py --retrieval_mode hybrid --dataset_name 2wiki --k_retrieve 5 --n_eval 50
+```
+
+---
+
+## Step 3 — Run Multi-Hop RAG
 
 ```bash
 python run_multihop.py
 ```
 
-Arguments:
+Uses:
+- LLM-based question decomposition
+- Per-hop retrieval + answering
+- Final synthesis model
 
-| Flag | Meaning | Default |
-|------|---------|---------|
-| `--retrieval_mode faiss/bm25/hybrid` | choose retrieval mode | faiss |
-| `--dataset_name hotpot/musique/2wiki` | choose dataset | hotpot |
-| `--k_retrieve (1-10)` | number of chunks to use as context | 5 |
-| `--n (up to max size of validation set)` | number of validation samples to test | 100 |
-| `--index_dir (path)` | path to faiss index folder (keep as default unless changed) | vector_stores |
-
-Example full run:
+### Example
 
 ```bash
 python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10
@@ -142,74 +194,76 @@ python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve
 
 ---
 
-## Step 3 (Optional) — Compare single-hop and multi-hop on a single example
-
-These scripts allow you to compare single-hop and multi-hop models on a single example in verbose mode
-
-Comparison:
+## Step 4 — Compare Single-Hop vs Multi-Hop on One Question
 
 ```bash
 python reasoning_trace_comparison.py
 ```
 
-Arguments:
-
-| Flag | Meaning | Default |
-|------|---------|---------|
-| `--retrieval_mode faiss/bm25/hybrid` | choose retrieval mode | faiss |
-| `--dataset_name hotpot/musique/2wiki` | choose dataset | hotpot |
-| `--k_retrieve (1-10)` | number of chunks to use as context | 5 |
-| `--question_idx (up to max size of validation set)` | question index to test | 4 |
-| `--index_dir (path)` | path to faiss index folder (keep as default unless changed) | vector_stores |
-
-Example full run:
+### Example
 
 ```bash
-python reasoning_trace_comparison.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --question_idx 4
+python reasoning_trace_comparison.py --retrieval_mode bm25 --dataset_name 2wiki --k_retrieve 5 --question_idx 4
 ```
+
+This prints:
+- Sub-questions generated
+- Retrieved passages
+- Intermediate answers
+- Final answer
+- Trace of reasoning differences
 
 ---
 
 ## Retrieval Modes
 
-- **faiss** — dense retrieval (default)
-- **bm25** — sparse retrieval
-- **hybrid** — RRF fusion using FAISS + BM25
+| Mode | Description |
+|------|-------------|
+| `faiss` | Dense retrieval using BGE embeddings |
+| `bm25` | Classic sparse retrieval |
+| `hybrid` | Reciprocal Rank Fusion over dense + sparse |
+
+Hybrid almost always improves recall.
 
 ---
 
-## Single-hop Pipeline Overview
+## Single-Hop Architecture
 
 `single_hop.py` performs:
 
-- Retrieve top-k passages via the configured retriever
-- Format retrieved context plus the question into the single-hop prompt
-- Produce a concise answer (or `"Unknown"`)
+1. Retrieve top-k contexts
+2. Construct a single-pass prompt
+3. Produce final answer
+4. Return answer + evaluation metadata
 
-This baseline establishes performance without intermediate decomposition.
+This baseline measures the power of retrieval alone.
 
 ---
 
-## Multi-hop Pipeline Overview
+## Multi-Hop Architecture
 
-`multi_hop.py` orchestrates:
+`multi_hop.py` performs:
 
-- LLM-based question decomposition (structured output enforced via Pydantic)
-- Iterative retrieval per sub-question, incorporating previous hop answers
-- Hop-by-hop answer generation
-- Final answer synthesis using all hop outputs and supporting passages
+1. LLM-based question decomposition into sub-questions
+2. Retrieval per hop
+3. Intermediate answering
+4. Final answer synthesis
+
+The decomposition relies on structured outputs (Pydantic), requiring models that support `response_format=json_schema`.
 
 ---
 
 ## Vector Store Persistence
 
-- **FAISS retriever**: stored on disk (e.g., `vector_stores/<dataset_name>`) to avoid re-embedding hundreds of thousands of chunks each run.
-- **BM25 retriever**: stores the corpus as a `.jsonl` file inside `corpora/<dataset_name>.jsonl`, which is loaded at runtime to build the BM25 index.
+- FAISS retriever: Stored on disk (e.g., `vector_stores/faiss_hotpot/`) to avoid re-embedding hundreds of thousands of chunks each run.
+- BM25 retriever: Loads corpus from `.jsonl` file inside `corpora/` at runtime to build the BM25 index.
 
 ---
 
 ## Evaluation Metrics
 
-- **Exact Match (EM)** — measures whether the model's answer matches the ground-truth string exactly.
-- **F1 Score** — token-level overlap metric that balances precision and recall.
-- **LLM-based Evaluator** — uses a large language model to judge answer correctness based on semantics rather than surface form.
+| Metric | Meaning |
+|--------|---------|
+| EM (Exact Match) | Strict correctness — prediction must match ground truth exactly |
+| F1 | Token-level overlap balancing precision and recall |
+| LLM Eval | Semantic scoring using an LLM judge |
