@@ -61,6 +61,7 @@ def llm_eval_score(question, gold_answer, model_answer):
     )
 
     raw = resp.content.strip()
+    print(raw)
     ans = json.loads(raw)
     ans["score"] = float(ans["score"])
 

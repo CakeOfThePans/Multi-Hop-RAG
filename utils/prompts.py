@@ -70,47 +70,27 @@ def build_answer_subq_prompt(original_question, subq, passages, hops):
     )
 
 def build_final_answer_prompt(original_question, hops):
+    
+    mem_lines = "\n".join([f"{i+1}. {h['subq']} -> {h['answer']}" for i, h in enumerate(hops)]) or "None."
+    support = []
 
-    steps = "\n".join([
-        f"{i+1}) {h['subq']} → {h['answer']}"
-        for i, h in enumerate(hops)
-    ])
 
-    support_blocks = []
     for i, h in enumerate(hops):
-        for j, doc in enumerate(h["docs"]):
-            support_blocks.append(
-                f"[HOP {i+1} • DOC {j+1}]\n{doc[:600]}..."
-            )
-    ctx = "\n\n".join(support_blocks)
-
-    return f"""
-You will now answer the original question using multi-hop reasoning.
-
-Below is the reasoning trace showing how the model decomposed the problem,
-followed by retrieved evidence. Use the evidence — NOT assumptions — to answer.
-
-If the hops contain irrelevant or incorrect intermediate answers,
-ignore them and rely on the source passages.
-
-=============================
-ORIGINAL QUESTION
-=============================
-{original_question}
-
-=============================
-REASONING STEPS (summarized)
-=============================
-{steps}
-
-=============================
-RELEVANT PASSAGES (evidence)
-=============================
-{ctx}
-
-=============================
-FINAL RESPONSE IN ONE SENTENCE:
-""".strip()
+        for j, p in enumerate(h["docs"]):
+            support.append(f"HOP {i+1} PASSAGE {j+1}:\n{p}")
+    ctx = "\n\n".join(support)
+    
+    return (
+        "Using the prior sub-questions and their answers along with the supporting context, answer the ORIGINAL QUESTION.\n"
+        "The sub-questions have been designed to help you arrive at the final answer step-by-step but may obtain unnecessary details.\n"
+        "If the sub-question answers do not provide enough information to answer the original question, you may disregard them and use only the context.\n"
+        "The final answer should be concise and directly address the original question, not the sub-questions.\n"
+        "If presented with a yes or no question, answer with just 'yes' or 'no'.\n"
+        f"ORIGINAL QUESTION:\n{original_question}\n\n"
+        f"SUB-QUESTION ANSWERS:\n{mem_lines}\n\n"
+        f"SUPPORTING CONTEXT:\n{ctx}\n\n"
+        "Final answer (short phrase only):"
+    )
 
 LLM_EVAL_SYSTEM_PROMPT = ("""
 You are an expert evaluator for a question-answering system.

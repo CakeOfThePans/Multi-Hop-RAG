@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
 from retrievers.reranker import CrossEncoderReranker, RerankRetriever
+from utils.prompts import SINGLE_HOP_SYSTEM_PROMPT, build_singlehop_user_prompt
 
 class SingleHopQA:
 
@@ -36,12 +37,15 @@ class SingleHopQA:
                 snippet = d.page_content[:200].replace("\n", " ")
                 print(f"[{i}] {snippet}...   meta={d.metadata}")
 
-        context = "\n\n".join([d.page_content for d in docs])
-        msg = [
-            {"role": "system", "content": "Answer using only given context."},
-            {"role": "user", "content": f"Question: {question}\n\nContext:\n{context}\n\nAnswer:"}
-        ]
-        answer = self.llm.invoke(msg).content.strip()
+        passages = [d.page_content for d in docs]
+        user_prompt = build_singlehop_user_prompt(question, passages)
+        resp = self.llm.invoke(
+            [
+                {"role": "system", "content": SINGLE_HOP_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+        answer = resp.content.strip()
 
         if save_trace:
             with open(save_trace, "a", encoding="utf-8") as f:
