@@ -8,6 +8,7 @@ from retrievers.bm25_retriever import BM25Retriever
 from retrievers.hybrid_retriever import HybridRetriever
 from models.single_hop import SingleHopQA
 from models.multi_hop import MultiHopQA
+from retrievers.reranker import CrossEncoderReranker, RerankRetriever
 from utils.eval import f1_score, exact_match_score, llm_eval_score
 
 def load_validation_set(name):
@@ -30,6 +31,11 @@ def main():
     parser.add_argument("--k_retrieve", type=int, default=5)
     parser.add_argument("--question_idx", type=int, default=4)
     parser.add_argument("--index_dir", type=str, default="vector_stores")
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Enable cross-encoder reranking on top of the chosen retriever.",
+    )
 
     args = parser.parse_args()
     retrieval_mode = args.retrieval_mode
@@ -37,35 +43,45 @@ def main():
     k_retrieve = args.k_retrieve
     question_idx = args.question_idx
     index_dir = args.index_dir
+    use_rerank = args.rerank
 
     if retrieval_mode == "faiss":
-        retriever = FaissRetriever(dataset_name, index_dir=index_dir)
+        base_retriever = FaissRetriever(dataset_name, index_dir=index_dir)
 
     elif retrieval_mode == "bm25":
-        retriever = BM25Retriever(dataset_name)
+        base_retriever = BM25Retriever(dataset_name)
 
     elif retrieval_mode == "hybrid":
-        retriever = HybridRetriever(
+        base_retriever = HybridRetriever(
             FaissRetriever(dataset_name, index_dir=index_dir),
             BM25Retriever(dataset_name),
             k_dense=k_retrieve,
             k_sparse=k_retrieve,
         )
 
+    if use_rerank:
+        reranker = CrossEncoderReranker()
+        base_retriever = RerankRetriever(
+            base_retriever=base_retriever,
+            reranker=reranker,
+            prefetch_k=max(3 * k_retrieve, 20),
+        )
+        effective_retriever_name = f"{retrieval_mode}+rerank"
+    else:
+        effective_retriever_name = retrieval_mode
+
     singlehop_model = SingleHopQA(
-        retriever=retriever,
+        retriever=base_retriever,
         chat_model="gpt-4.1-mini",
         temperature=0.0,
-        verbose=True
     )
 
     multihop_model = MultiHopQA(
-        retriever=retriever,
+        retriever=base_retriever,
         chat_model="gpt-4.1-mini",
         temperature=0.0,
         max_hops=3,
         max_docs_per_hop=3,
-        verbose=True
     )
 
     ds_val = load_validation_set(dataset_name)
@@ -82,17 +98,19 @@ def main():
 
     print("\n==================================================================")
     print("SINGLE-HOP RAG")
-    single_hop_pred = singlehop_model.predict(question, k=k_retrieve)
+    single_hop_pred = singlehop_model.predict(question, k=k_retrieve, trace=True)
     print("EM:", exact_match_score(single_hop_pred, answer))
     print("F1:", f1_score(single_hop_pred, answer))
     print("LLM Eval:", llm_eval_score(question, answer, single_hop_pred)["score"])
 
     print("\n==================================================================")
     print("MULTI-HOP RAG")
-    multi_hop_pred = multihop_model.predict(question, k=k_retrieve)
+    multi_hop_pred = multihop_model.predict(question, k=k_retrieve, trace=True)
     print("EM:", exact_match_score(multi_hop_pred, answer))
     print("F1:", f1_score(multi_hop_pred, answer))
-    print("LLM Eval:", llm_eval_score(question, answer, multi_hop_pred)["score"])
+    llm_eval = llm_eval_score(question, answer, multi_hop_pred)
+    print("LLM Eval:", llm_eval["score"])
+    print("LLM Eval Explanation:", llm_eval["explanation"]) # Optional
 
 if __name__ == "__main__":
     main()

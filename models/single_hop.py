@@ -31,12 +31,6 @@ class SingleHopQA:
 
         docs = self.retriever.similarity_search(question, k=k)
 
-        if trace:
-            print("\nSINGLE-HOP TRACE")
-            for i, d in enumerate(docs, 1):
-                snippet = d.page_content[:200].replace("\n", " ")
-                print(f"[{i}] {snippet}...   meta={d.metadata}")
-
         passages = [d.page_content for d in docs]
         user_prompt = build_singlehop_user_prompt(question, passages)
         resp = self.llm.invoke(
@@ -46,6 +40,13 @@ class SingleHopQA:
             ]
         )
         answer = resp.content.strip()
+
+        if trace:
+            print("\nPassages:")
+            for i, d in enumerate(docs, 1):
+                snippet = d.page_content[:200].replace("\n", " ")
+                print(f"[{i}] {snippet}...   meta={d.metadata}")
+            print(f"Predicted Answer: {answer}\n")
 
         if save_trace:
             with open(save_trace, "a", encoding="utf-8") as f:

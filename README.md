@@ -170,7 +170,7 @@ python run_singlehop.py
 ### Example
 
 ```bash
-python run_singlehop.py --retrieval_mode hybrid --dataset_name 2wiki --k_retrieve 5 --n_eval 50
+python run_singlehop.py --retrieval_mode hybrid --dataset_name 2wiki --k_retrieve 5 --n_eval 50 --rerank
 ```
 
 ---
@@ -186,10 +186,21 @@ Uses:
 - Per-hop retrieval + answering
 - Final synthesis model
 
+### Arguments
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `--retrieval_mode` | `faiss` / `bm25` / `hybrid` | `faiss` |
+| `--dataset_name` | `hotpot` / `musique` / `2wiki` | `hotpot` |
+| `--k_retrieve` | Number of retrieved docs | `5` |
+| `--n_eval` | Number of validation samples | `100` |
+| `--index_dir` | Path to FAISS indexes | `vector_stores` |
+| `--rerank` | Enable cross-encoder reranking | `false` |
+
 ### Example
 
 ```bash
-python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10
+python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10 --rerank
 ```
 
 ---
@@ -200,18 +211,35 @@ python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve
 python reasoning_trace_comparison.py
 ```
 
+### Arguments
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `--retrieval_mode` | `faiss` / `bm25` / `hybrid` | `faiss` |
+| `--dataset_name` | `hotpot` / `musique` / `2wiki` | `hotpot` |
+| `--k_retrieve` | Number of retrieved docs | `5` |
+| `--question_idx` | Question index from the validation set | `4` |
+| `--index_dir` | Path to FAISS indexes | `vector_stores` |
+| `--rerank` | Enable cross-encoder reranking | `false` |
+
 ### Example
 
 ```bash
-python reasoning_trace_comparison.py --retrieval_mode bm25 --dataset_name 2wiki --k_retrieve 5 --question_idx 4
+python reasoning_trace_comparison.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --question_idx 4 --rerank
 ```
 
 This prints:
-- Sub-questions generated
-- Retrieved passages
-- Intermediate answers
-- Final answer
-- Trace of reasoning differences
+- Original question and ground truth answer
+- Reasoning trace for single-hop, including:
+    - Retrived passages
+    - Final model answer
+    - Evaluation metrics
+- Reasoning trace for multi-hop, including:
+    - Sub-questions generated
+    - Retrieved passages
+    - Intermediate answers
+    - Final model answer
+    - Evaluation Metrics
 
 ---
 

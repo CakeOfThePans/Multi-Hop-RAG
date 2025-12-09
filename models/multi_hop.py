@@ -22,7 +22,6 @@ class MultiHopQA:
         max_docs_per_hop=3,
         use_reranker=True,
         prefetch_k=20,
-        verbose=False
     ):
         if use_reranker:
             try:
@@ -36,7 +35,6 @@ class MultiHopQA:
         self.llm = ChatOpenAI(model=chat_model, temperature=temperature)
         self.max_hops = max_hops
         self.max_docs_per_hop = max_docs_per_hop
-        self.verbose = verbose
         self.decomposer = self._build_decomposer(max_hops)
 
     def _build_decomposer(self, max_hops):
@@ -66,18 +64,20 @@ class MultiHopQA:
 
             docs = self.retriever.similarity_search(composed, k=k)[:self.max_docs_per_hop]
 
-            if trace:
-                print(f"\nHOP {len(hops)+1}")
-                print("SubQ:", subq)
-                print("Query Used:", composed)
-                for i,d in enumerate(docs,1):
-                    print(f"[{i}] {d.page_content[:200]}... meta={d.metadata}")
-
             passages = [d.page_content for d in docs]
             answer = self.llm.invoke([
                 {"role":"system","content":ANSWER_SUBQ_SYSTEM_PROMPT},
                 {"role":"user","content":build_answer_subq_prompt(question, subq, passages, hops)}
             ]).content.strip()
+
+            if trace:
+                print(f"\nHOP {len(hops)+1}")
+                print("Subquestion:", subq)
+                print("Composed question:", composed)
+                print("\nPassages:")
+                for i,d in enumerate(docs,1):
+                    print(f"[{i}] {d.page_content[:200]}... meta={d.metadata}")
+                print(f"Predicted Answer: {answer}\n")
 
             hops.append({
                 "subq": subq,
@@ -91,6 +91,9 @@ class MultiHopQA:
             {"role":"user","content":build_final_answer_prompt(question, hops)}
         ]).content.strip()
 
+        if trace:
+            print("\nOriginal Question:", question)
+            print("Predicted Final Answer:", final) 
 
         if save_trace:
             with open(save_trace, "a", encoding="utf-8") as f:
