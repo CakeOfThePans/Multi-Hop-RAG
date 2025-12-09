@@ -1,26 +1,24 @@
 from typing import List, Tuple, Dict, Any
 from langchain_core.documents import Document
-
 from retrievers.faiss_retriever import FaissRetriever
 from retrievers.bm25_retriever import BM25Retriever
 
 class HybridRetriever:
     """
-    Hybrid retriever that fuses FAISS (dense) and BM25 (sparse) results
-    using Reciprocal Rank Fusion (RRF).
+    Hybrid retriever that fuses FAISS and BM25 results using Reciprocal Rank Fusion
     """
 
-    def __init__(self, faiss_retriever: FaissRetriever, bm25_retriever: BM25Retriever, k_dense: int = 5, k_sparse: int = 5, k0: int = 60):
+    def __init__(self, faiss_retriever, bm25_retriever, k_dense = 5, k_sparse = 5, k0 = 60):
         self.faiss_retriever = faiss_retriever
         self.bm25_retriever = bm25_retriever
         self.k_dense = k_dense
         self.k_sparse = k_sparse
         self.k0 = k0
 
-    def _rrf_fuse(self, dense_docs: List[Document], sparse_docs: List[Document], k: int) -> List[Document]:
-        scores: Dict[Tuple[str, Tuple[Tuple[str, Any], ...]], Dict[str, Any]] = {}
+    def _rrf_fuse(self, dense_docs, sparse_docs, k):
+        scores = {}
 
-        def add_docs(docs: List[Document], weight: float):
+        def add_docs(docs, weight):
             for rank, doc in enumerate(docs):
                 key = (
                     doc.page_content,
@@ -36,7 +34,7 @@ class HybridRetriever:
         fused = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
         return [entry["doc"] for entry in fused[:k]]
 
-    def similarity_search(self, query: str, k: int = 5) -> List[Document]:
+    def similarity_search(self, query, k = 5):
         dense_docs = self.faiss_retriever.similarity_search(query, k=self.k_dense)
         sparse_docs = self.bm25_retriever.similarity_search(query, k=self.k_sparse)
-        return self._rrf_fuse(dense_docs, sparse_docs, k=k)
+        return self._rrf_fuse(dense_docs, sparse_docs, k)

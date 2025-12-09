@@ -1,136 +1,100 @@
+import json
 from typing import List, Dict, Any
 from pydantic import Field, conlist, create_model
 from langchain_openai import ChatOpenAI
-
+from langchain_core.documents import Document
+from retrievers.reranker import CrossEncoderReranker, RerankRetriever
 from utils.prompts import (
-    DECOMPOSER_SYSTEM_PROMPT,
-    DECOMPOSER_USER_TEMPLATE,
-    COMPOSE_QUERY_SYSTEM_PROMPT,
-    ANSWER_SUBQ_SYSTEM_PROMPT,
-    FINAL_ANSWER_SYSTEM_PROMPT,
-    build_compose_query_prompt,
-    build_answer_subq_prompt,
-    build_final_answer_prompt,
+    DECOMPOSER_SYSTEM_PROMPT, DECOMPOSER_USER_TEMPLATE,
+    COMPOSE_QUERY_SYSTEM_PROMPT, ANSWER_SUBQ_SYSTEM_PROMPT, FINAL_ANSWER_SYSTEM_PROMPT,
+    build_compose_query_prompt, build_answer_subq_prompt, build_final_answer_prompt
 )
 
 
 class MultiHopQA:
-    """
-    Multi-hop RAG system:
-      - LLM-based question decomposition
-      - iterative retrieval & answering
-      - final answer synthesis
-    """
 
-    def __init__(self, retriever, chat_model: str = "gpt-4o-mini", temperature: float = 0.0, max_hops: int = 3, max_docs_per_hop: int = 3, verbose: bool = False):
-        self.retriever = retriever
+    def __init__(
+        self,
+        retriever,
+        chat_model="gpt-4.1-mini",
+        temperature=0.0,
+        max_hops=3,
+        max_docs_per_hop=3,
+        use_reranker=True,
+        prefetch_k=20,
+        verbose=False
+    ):
+        if use_reranker:
+            try:
+                rerank_engine = CrossEncoderReranker()
+                self.retriever = RerankRetriever(retriever, rerank_engine, prefetch_k=prefetch_k)
+            except Exception:
+                self.retriever = retriever
+        else:
+            self.retriever = retriever
+
         self.llm = ChatOpenAI(model=chat_model, temperature=temperature)
         self.max_hops = max_hops
         self.max_docs_per_hop = max_docs_per_hop
-        self.decomposer = self._make_decomposer(max_subqs=max_hops)
         self.verbose = verbose
+        self.decomposer = self._build_decomposer(max_hops)
 
-    # ---------- Decomposition ----------
+    def _build_decomposer(self, max_hops):
+        Schema = create_model("Decompose", subquestions=(conlist(str, min_length=2, max_length=max_hops), Field(description="ordered reasoning hops")))
+        structured = self.llm.bind_tools(tools=[], response_format=Schema, strict=True)
 
-    def _make_decomposer(self, max_subqs: int):
-        DecompSchema = create_model(
-            "DecompSchema",
-            subquestions=(
-                conlist(str, min_length=2, max_length=max_subqs),
-                Field(
-                    description=(
-                        "Ordered sub-questions to solve the original in sequence."
-                    )
-                ),
-            ),
-        )
-
-        structured_llm = self.llm.bind_tools(tools=[], response_format=DecompSchema, strict=True)
-
-        def decompose(question: str) -> List[str]:
-            user_prompt = DECOMPOSER_USER_TEMPLATE.format(
-                max_subqs=max_subqs, q=question
-            )
+        def decompose(q):
             msgs = [
                 {"role": "system", "content": DECOMPOSER_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
+                {"role": "user",  "content": DECOMPOSER_USER_TEMPLATE.format(max_subqs=max_hops, q=q)}
             ]
-            resp = structured_llm.invoke(msgs)
-            parsed = resp.additional_kwargs["parsed"]
-            return parsed.subquestions
+            resp = structured.invoke(msgs)
+            return resp.additional_kwargs["parsed"].subquestions
 
         return decompose
 
-    # ---------- Helper LLM calls ----------
+    def predict(self, question: str, k=5, trace=False, save_trace=None):
 
-    def _compose_query(self, question: str, subq: str, hops: List[Dict[str, Any]]) -> str:
-        user_prompt = build_compose_query_prompt(question, subq, hops)
-        resp = self.llm.invoke(
-            [
-                {"role": "system", "content": COMPOSE_QUERY_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ]
-        )
-        return resp.content.strip()
+        hops = []
+        subqs = self.decomposer(question)
 
-    def _answer_subq(self, question: str, subq: str, passages: List[str], hops: List[Dict[str, Any]]) -> str:
-        user_prompt = build_answer_subq_prompt(question, subq, passages, hops)
-        resp = self.llm.invoke(
-            [
-                {"role": "system", "content": ANSWER_SUBQ_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ]
-        )
-        return resp.content.strip()
+        for subq in subqs:
+            composed = subq if not hops else self.llm.invoke([
+                {"role":"system","content":COMPOSE_QUERY_SYSTEM_PROMPT},
+                {"role":"user", "content":build_compose_query_prompt(question, subq, hops)}
+            ]).content.strip()
 
-    def _get_final_answer(self, question: str, hops: List[Dict[str, Any]]) -> str:
-        user_prompt = build_final_answer_prompt(question, hops)
-        resp = self.llm.invoke(
-            [
-                {"role": "system", "content": FINAL_ANSWER_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ]
-        )
-        return resp.content.strip()
+            docs = self.retriever.similarity_search(composed, k=k)[:self.max_docs_per_hop]
 
-    # ---------- Main pipeline ----------
+            if trace:
+                print(f"\nHOP {len(hops)+1}")
+                print("SubQ:", subq)
+                print("Query Used:", composed)
+                for i,d in enumerate(docs,1):
+                    print(f"[{i}] {d.page_content[:200]}... meta={d.metadata}")
 
-    def predict(self, question: str, k: int = 5) -> str:
-        subquestions = self.decomposer(question)
-        hops: List[Dict[str, Any]] = []
+            passages = [d.page_content for d in docs]
+            answer = self.llm.invoke([
+                {"role":"system","content":ANSWER_SUBQ_SYSTEM_PROMPT},
+                {"role":"user","content":build_answer_subq_prompt(question, subq, passages, hops)}
+            ]).content.strip()
 
-        for subq in subquestions:
-            if hops:
-                composed_q = self._compose_query(question, subq, hops)
-            else:
-                composed_q = subq
+            hops.append({
+                "subq": subq,
+                "composed": composed,
+                "docs": passages,
+                "answer": answer
+            })
 
-            retrieved_docs = self.retriever.similarity_search(composed_q, k=k)
-            passages = [d.page_content for d in retrieved_docs][:self.max_docs_per_hop]
+        final = self.llm.invoke([
+            {"role":"system","content":FINAL_ANSWER_SYSTEM_PROMPT},
+            {"role":"user","content":build_final_answer_prompt(question, hops)}
+        ]).content.strip()
 
-            ans = self._answer_subq(question, subq, passages, hops)
 
-            hops.append(
-                {
-                    "subq": subq,
-                    "composed": composed_q,
-                    "passages": passages,
-                    "answer": ans,
-                }
-            )
+        if save_trace:
+            with open(save_trace, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"question":question,"hops":hops,"final":final})+"\n")
+            print(f"Trace saved to {save_trace}")
 
-        final_answer = self._get_final_answer(question, hops)
-
-        if self.verbose:
-            print("Question:", question)
-            for i, h in enumerate(hops):
-                print(f"Sub-question {i + 1}: {h['subq']}")
-                print(f"Composed Query: {h['composed']}")
-                for j, p in enumerate(h['passages']):
-                    print(f"Passage {j + 1}:\n{p}\n")
-                print(f"Answer: {h['answer']}\n")
-
-            print("Original Question:", question)
-            print("Predicted Answer:", final_answer) 
-
-        return final_answer
+        return final

@@ -7,8 +7,9 @@ from datasets import Dataset
 from langchain_openai import ChatOpenAI
 from utils.prompts import LLM_EVAL_SYSTEM_PROMPT, build_llm_eval_prompt
 from dotenv import load_dotenv
+from rouge_score import rouge_scorer
 
-def normalize_answer(s: str) -> str:
+def normalize_answer(s):
     def remove_articles(text):
         return re.sub(r"\b(a|an|the)\b", " ", text)
 
@@ -25,7 +26,7 @@ def normalize_answer(s: str) -> str:
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
-def f1_score(prediction: str, ground_truth: str) -> float:
+def f1_score(prediction, ground_truth):
     normalized_prediction = normalize_answer(prediction)
     normalized_ground_truth = normalize_answer(ground_truth)
 
@@ -45,13 +46,12 @@ def f1_score(prediction: str, ground_truth: str) -> float:
     return (2 * precision * recall) / (precision + recall)
 
 
-def exact_match_score(prediction: str, ground_truth: str) -> float:
+def exact_match_score(prediction, ground_truth):
     return 1.0 if normalize_answer(prediction) == normalize_answer(ground_truth) else 0.0
 
-# LLM Evaluation
 load_dotenv()
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
-def llm_eval_score(question: str, gold_answer: str, model_answer: str) -> Dict[str, Any]:
+llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0.0)
+def llm_eval_score(question, gold_answer, model_answer):
     user_prompt = build_llm_eval_prompt(question, gold_answer, model_answer)
     resp = llm.invoke(
         [
@@ -61,40 +61,37 @@ def llm_eval_score(question: str, gold_answer: str, model_answer: str) -> Dict[s
     )
 
     raw = resp.content.strip()
-    # parse the json
     ans = json.loads(raw)
     ans["score"] = float(ans["score"])
 
     return ans
 
-def evaluate_qa_system(ds_val: Dataset, predict_fn: Callable[[str, int], str], n: int = 100, k: int = 5) -> Dict[str, Any]:
-    """
-    Evaluate a QA system on the first n validation examples with EM and F1.
-    predict_fn(question, k) -> predicted answer (string)
-    """
+def evaluate_qa_system(ds_val, predict_fn, n = 100, k = 5):
+
     idxs = list(range(min(n, len(ds_val))))
     ems, f1s, llm_evals = [], [], []
 
     for i in idxs:
         ex = ds_val[i]
-        q = ex["question"]
-        ground_truth = ex["answer"]
+        q  = ex["question"]
+        gt = ex["answer"]
 
         pred = predict_fn(q, k)
 
         print(f"Q: {q}")
         print(f"Pred: {pred}")
-        print(f"Ground Truth: {ground_truth}")
+        print(f"Ground Truth: {gt}\n")
 
-        ems.append(exact_match_score(pred, ground_truth))
-        f1s.append(f1_score(pred, ground_truth))
-        llm_evals.append(llm_eval_score(q, ground_truth, pred)["score"])
+        ems.append(exact_match_score(pred, gt))
+        f1s.append(f1_score(pred, gt))
+        llm_evals.append(llm_eval_score(q, gt, pred)["score"])
 
-    m = len(idxs) if idxs else 1
+    m = len(idxs) or 1
+
     return {
-        "n": len(idxs),
+        "n": m,
         "k": k,
-        "EM": sum(ems) / m,
-        "F1": sum(f1s) / m,
-        "LLM Eval": sum(llm_evals) / m
+        "EM": sum(ems)/m,
+        "F1": sum(f1s)/m,
+        "LLM Eval": sum(llm_evals)/m,
     }

@@ -1,20 +1,11 @@
-from typing import List, Dict
-
-
-# ---------- Single-hop prompts ----------
-
 SINGLE_HOP_SYSTEM_PROMPT = (
     "You are a precise QA assistant. Return just the short answer phrase with no explanation, and no full sentences."
     "If you are COMPLETELY UNSURE of the answer based on the provided passages, respond with 'Unknown'."
 )
 
-
-def build_singlehop_user_prompt(question: str, passages: List[str]) -> str:
+def build_singlehop_user_prompt(question, passages):
     bundle = "\n\n".join([f"PASSAGE {i+1}:\n{p}" for i, p in enumerate(passages)])
     return f"{bundle}\n\nQUESTION: {question}\nANSWER:"
-
-
-# ---------- Multi-hop prompts ----------
 
 DECOMPOSER_SYSTEM_PROMPT = (
     "You have to break complex questions into concise, sequential sub-questions."
@@ -46,7 +37,7 @@ FINAL_ANSWER_SYSTEM_PROMPT = (
 )
 
 
-def build_compose_query_prompt(original_question: str,subq: str,hops: List[Dict]) -> str:
+def build_compose_query_prompt(original_question, subq, hops):
     
     mem_lines = "\n".join([f"{i+1}. {h['subq']} -> {h['answer']}" for i, h in enumerate(hops)]) or "None yet."
     
@@ -63,8 +54,7 @@ def build_compose_query_prompt(original_question: str,subq: str,hops: List[Dict]
         "SEARCH QUERY:"
     )
 
-
-def build_answer_subq_prompt(original_question: str, subq: str, passages: List[str], hops: List[Dict]) -> str:
+def build_answer_subq_prompt(original_question, subq, passages, hops):
     
     mem_lines = "\n".join([f"{i+1}. {h['subq']} -> {h['answer']}" for i, h in enumerate(hops)]) or "None."
     ctx = "\n\n".join([f"PASSAGE {i+1}:\n{p}" for i, p in enumerate(passages)])
@@ -79,29 +69,49 @@ def build_answer_subq_prompt(original_question: str, subq: str, passages: List[s
         "Answer (short phrase only):"
     )
 
+def build_final_answer_prompt(original_question, hops):
 
-def build_final_answer_prompt(original_question: str, hops: List[Dict]) -> str:
-    
-    mem_lines = "\n".join([f"{i+1}. {h['subq']} -> {h['answer']}" for i, h in enumerate(hops)]) or "None."
-    support = []
+    steps = "\n".join([
+        f"{i+1}) {h['subq']} → {h['answer']}"
+        for i, h in enumerate(hops)
+    ])
+
+    support_blocks = []
     for i, h in enumerate(hops):
-        for j, p in enumerate(h["passages"]):
-            support.append(f"HOP {i+1} PASSAGE {j+1}:\n{p}")
-    ctx = "\n\n".join(support)
-    
-    return (
-        "Using the prior sub-questions and their answers along with the supporting context, answer the ORIGINAL QUESTION.\n"
-        "The sub-questions have been designed to help you arrive at the final answer step-by-step but may obtain unnecessary details.\n"
-        "If the sub-question answers do not provide enough information to answer the original question, you may disregard them and use only the context.\n"
-        "The final answer should be concise and directly address the original question, not the sub-questions.\n"
-        "If presented with a yes or no question, answer with just 'yes' or 'no'.\n"
-        f"ORIGINAL QUESTION:\n{original_question}\n\n"
-        f"SUB-QUESTION ANSWERS:\n{mem_lines}\n\n"
-        f"SUPPORTING CONTEXT:\n{ctx}\n\n"
-        "Final answer (short phrase only):"
-    )
+        for j, doc in enumerate(h["docs"]):
+            support_blocks.append(
+                f"[HOP {i+1} • DOC {j+1}]\n{doc[:600]}..."
+            )
+    ctx = "\n\n".join(support_blocks)
 
-# ---------- LLM Evaluation prompts ----------
+    return f"""
+You will now answer the original question using multi-hop reasoning.
+
+Below is the reasoning trace showing how the model decomposed the problem,
+followed by retrieved evidence. Use the evidence — NOT assumptions — to answer.
+
+If the hops contain irrelevant or incorrect intermediate answers,
+ignore them and rely on the source passages.
+
+=============================
+ORIGINAL QUESTION
+=============================
+{original_question}
+
+=============================
+REASONING STEPS (summarized)
+=============================
+{steps}
+
+=============================
+RELEVANT PASSAGES (evidence)
+=============================
+{ctx}
+
+=============================
+FINAL RESPONSE IN ONE SENTENCE:
+""".strip()
+
 LLM_EVAL_SYSTEM_PROMPT = ("""
 You are an expert evaluator for a question-answering system.
 You are given a question, the gold answer, and the model's answer.
@@ -135,7 +145,7 @@ Do NOT include any other keys.
 Do NOT include any text outside of the JSON object.
 """)
 
-def build_llm_eval_prompt(question: str, gold_answer: str, model_answer: str):
+def build_llm_eval_prompt(question, gold_answer, model_answer):
     return (f"""
         Question:
         {question}

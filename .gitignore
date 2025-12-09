@@ -26,6 +26,7 @@ __pycache__/
 venv/
 env/
 .venv/
+mhrag_env/
 
 # pip cache
 pip-wheel-metadata/
@@ -139,4 +140,15 @@ cache/
 output/
 results/
 experiment_runs/
+
+#############################
+# LOCAL PROJECT FILES
+#############################
+run_all.py
+visualize/
+
+#############################
+# LARGE DATASET FILES
+#############################
+2wiki/
 
