@@ -196,7 +196,7 @@ This prints:
 
 ---
 
-## Step 3 — Run Multi-Hop RAG
+## Step 4 — Run Multi-Hop RAG
 
 ```bash
 python run_multihop.py
@@ -233,7 +233,7 @@ This prints:
 
 ---
 
-## Step 4 — Compare Single-Hop vs Multi-Hop on One Question
+## Step 5 — Compare Single-Hop vs Multi-Hop on One Question
 
 ```bash
 python reasoning_trace_comparison.py
