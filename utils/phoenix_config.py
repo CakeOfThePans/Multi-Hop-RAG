@@ -15,8 +15,11 @@ Key responsibilities:
 import os
 import atexit
 from typing import Optional
-from phoenix.otel import register
 from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 
 
@@ -27,6 +30,7 @@ class PhoenixManager:
     
     def __init__(self):
         self.tracer_provider: Optional[TracerProvider] = None
+        self.span_processor: Optional[BatchSpanProcessor] = None
         self.port: int = 6006
         self.host: str = "127.0.0.1"
         self.project_name: str = "multi_hop_rag"
@@ -62,16 +66,29 @@ class PhoenixManager:
         self.host = host
         self.project_name = project_name
         
-        # Register OpenTelemetry instrumentation
-        # This automatically instruments LangChain and OpenAI calls
+        # Use direct OTLP configuration (phoenix.otel.register has issues with batch processing)
         try:
-            self.tracer_provider = register(
-                project_name=project_name,
-                auto_instrument=auto_instrument,
-                batch=True,  # Use batch processing for better performance
-                endpoint=f"http://{host}:{port}/v1/traces",
-                verbose=verbose,
+            trace_endpoint = f"http://{host}:{port}/v1/traces"
+            print(f"Initializing Phoenix tracing to: {trace_endpoint}")
+            
+            # Create resource with project name
+            resource = Resource.create(attributes={"service.name": project_name})
+            
+            # Create tracer provider
+            self.tracer_provider = TracerProvider(resource=resource)
+            
+            # Create OTLP exporter
+            exporter = OTLPSpanExporter(
+                endpoint=trace_endpoint,
+                timeout=10
             )
+            
+            # Create and add batch span processor
+            self.span_processor = BatchSpanProcessor(exporter)
+            self.tracer_provider.add_span_processor(self.span_processor)
+            
+            # Set as global tracer provider
+            trace.set_tracer_provider(self.tracer_provider)
             
             self._phoenix_url = f"http://{host}:{port}"
             self._is_initialized = True
@@ -79,8 +96,27 @@ class PhoenixManager:
             print(f"Phoenix initialized successfully")
             print(f"   Project: {project_name}")
             print(f"   Server URL: {self._phoenix_url}")
-            print(f"   Auto-instrumentation: {'enabled' if auto_instrument else 'disabled'}")
-            print(f"   Note: Start Phoenix server separately with: phoenix serve")
+            print(f"   Trace endpoint: {trace_endpoint}")
+            print(f"   Processor: BatchSpanProcessor")
+            
+            # Auto-instrument if requested
+            if auto_instrument:
+                try:
+                    from openinference.instrumentation.langchain import LangChainInstrumentor
+                    LangChainInstrumentor().instrument(tracer_provider=self.tracer_provider)
+                    print(f"   LangChain auto-instrumentation: enabled")
+                except ImportError:
+                    print(f"   LangChain auto-instrumentation: skipped (not installed)")
+                except Exception as e:
+                    print(f"   LangChain auto-instrumentation: failed ({e})")
+            
+            # Test connection
+            import requests
+            try:
+                response = requests.get(f"http://{host}:{port}", timeout=2)
+                print(f"   Phoenix server responding: HTTP {response.status_code}")
+            except Exception as conn_err:
+                print(f"   Warning: Could not verify Phoenix server connection: {conn_err}")
             
             # Register cleanup on exit
             atexit.register(self.shutdown)
@@ -103,8 +139,10 @@ class PhoenixManager:
         
         try:
             if self.tracer_provider:
-                # Flush any remaining spans
-                self.tracer_provider.force_flush()
+                print("Flushing remaining spans to Phoenix...")
+                # Flush any remaining spans (important for batched spans)
+                self.tracer_provider.force_flush(timeout_millis=5000)
+                print("Flush complete")
             
             self._is_initialized = False
             print("Phoenix tracing shutdown complete")

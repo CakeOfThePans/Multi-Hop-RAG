@@ -155,6 +155,11 @@ def main():
 
     # Shutdown Phoenix if it was enabled
     if args.phoenix:
+        print("\nFlushing traces to Phoenix...")
+        from utils.phoenix_config import get_phoenix_manager
+        manager = get_phoenix_manager()
+        if manager and manager.tracer_provider:
+            manager.tracer_provider.force_flush(timeout_millis=5000)
         shutdown_phoenix()
 
 if __name__ == "__main__":

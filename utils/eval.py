@@ -255,12 +255,11 @@ def evaluate_qa_system(
                 eval_data["error_categories"].append(error_category)
                 eval_data["llm_explanations"].append(llm_explanation)
             
-            print(f"Q: {q}")
-            print(f"Pred: {pred}")
-            print(f"Ground Truth: {gt}")
-            if is_phoenix_enabled():
-                print(f"Error Category: {error_category}")
-            print()
+            # Reduced output when Phoenix is enabled - details available in Phoenix UI
+            if not is_phoenix_enabled():
+                print(f"Q: {q}")
+                print(f"Pred: {pred}")
+                print(f"Ground Truth: {gt}\n")
             
         except Exception as e:
             # Handle errors in evaluation

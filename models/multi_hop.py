@@ -9,6 +9,13 @@ from utils.prompts import (
     COMPOSE_QUERY_SYSTEM_PROMPT, ANSWER_SUBQ_SYSTEM_PROMPT, FINAL_ANSWER_SYSTEM_PROMPT,
     build_compose_query_prompt, build_answer_subq_prompt, build_final_answer_prompt
 )
+from utils.phoenix_tracing import (
+    trace_rag_pipeline,
+    trace_multihop_decomposition,
+    trace_multihop_hop,
+    trace_multihop_synthesis
+)
+from utils.phoenix_config import is_phoenix_enabled, MULTIHOP_INTERMEDIATE_ANSWER, LLM_OPERATION
 
 
 class MultiHopQA:
@@ -52,52 +59,77 @@ class MultiHopQA:
         return decompose
 
     def predict(self, question: str, k=5, trace=False, save_trace=None):
+        with trace_rag_pipeline(question, "multi_hop") as pipeline_span:
+            hops = []
+            
+            # Decomposition span
+            with trace_multihop_decomposition(question, self.max_hops):
+                subqs = self.decomposer(question)
+            
+            if pipeline_span and is_phoenix_enabled():
+                pipeline_span.set_attribute("multihop.num_subquestions", len(subqs))
 
-        hops = []
-        subqs = self.decomposer(question)
+            # Per-hop processing
+            for hop_idx, subq in enumerate(subqs, 1):
+                # Query composition (if not first hop)
+                if hops:
+                    composed = self.llm.invoke([
+                        {"role":"system","content":COMPOSE_QUERY_SYSTEM_PROMPT},
+                        {"role":"user", "content":build_compose_query_prompt(question, subq, hops)}
+                    ]).content.strip()
+                else:
+                    composed = subq
 
-        for subq in subqs:
-            composed = subq if not hops else self.llm.invoke([
-                {"role":"system","content":COMPOSE_QUERY_SYSTEM_PROMPT},
-                {"role":"user", "content":build_compose_query_prompt(question, subq, hops)}
-            ]).content.strip()
+                # Hop span with nested retrieval and answer generation
+                with trace_multihop_hop(hop_idx, subq, composed) as hop_span:
+                    docs = self.retriever.similarity_search(composed, k=k)[:self.max_docs_per_hop]
 
-            docs = self.retriever.similarity_search(composed, k=k)[:self.max_docs_per_hop]
+                    passages = [d.page_content for d in docs]
+                    answer = self.llm.invoke([
+                        {"role":"system","content":ANSWER_SUBQ_SYSTEM_PROMPT},
+                        {"role":"user","content":build_answer_subq_prompt(question, subq, passages, hops)}
+                    ]).content.strip()
 
-            passages = [d.page_content for d in docs]
-            answer = self.llm.invoke([
-                {"role":"system","content":ANSWER_SUBQ_SYSTEM_PROMPT},
-                {"role":"user","content":build_answer_subq_prompt(question, subq, passages, hops)}
-            ]).content.strip()
+                    # Add hop attributes
+                    if hop_span and is_phoenix_enabled():
+                        hop_span.set_attribute(MULTIHOP_INTERMEDIATE_ANSWER, answer)
+                        hop_span.set_attribute("multihop.num_docs", len(docs))
+
+                if trace:
+                    print(f"\nHOP {hop_idx}")
+                    print("Subquestion:", subq)
+                    print("Composed question:", composed)
+                    print("\nPassages:")
+                    for i,d in enumerate(docs,1):
+                        print(f"[{i}] {d.page_content[:200]}... meta={d.metadata}")
+                    print(f"Predicted Answer: {answer}\n")
+
+                hops.append({
+                    "subq": subq,
+                    "composed": composed,
+                    "docs": passages,
+                    "answer": answer
+                })
+
+            # Final synthesis span
+            with trace_multihop_synthesis(question, len(hops)):
+                final = self.llm.invoke([
+                    {"role":"system","content":FINAL_ANSWER_SYSTEM_PROMPT},
+                    {"role":"user","content":build_final_answer_prompt(question, hops)}
+                ]).content.strip()
+
+            # Add final answer to pipeline span
+            if pipeline_span and is_phoenix_enabled():
+                pipeline_span.set_attribute("rag.answer", final)
+                pipeline_span.set_attribute("rag.total_hops", len(hops))
 
             if trace:
-                print(f"\nHOP {len(hops)+1}")
-                print("Subquestion:", subq)
-                print("Composed question:", composed)
-                print("\nPassages:")
-                for i,d in enumerate(docs,1):
-                    print(f"[{i}] {d.page_content[:200]}... meta={d.metadata}")
-                print(f"Predicted Answer: {answer}\n")
+                print("\nOriginal Question:", question)
+                print("Predicted Final Answer:", final) 
 
-            hops.append({
-                "subq": subq,
-                "composed": composed,
-                "docs": passages,
-                "answer": answer
-            })
+            if save_trace:
+                with open(save_trace, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"question":question,"hops":hops,"final":final})+"\n")
+                print(f"Trace saved to {save_trace}")
 
-        final = self.llm.invoke([
-            {"role":"system","content":FINAL_ANSWER_SYSTEM_PROMPT},
-            {"role":"user","content":build_final_answer_prompt(question, hops)}
-        ]).content.strip()
-
-        if trace:
-            print("\nOriginal Question:", question)
-            print("Predicted Final Answer:", final) 
-
-        if save_trace:
-            with open(save_trace, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"question":question,"hops":hops,"final":final})+"\n")
-            print(f"Trace saved to {save_trace}")
-
-        return final
+            return final
