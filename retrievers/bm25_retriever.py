@@ -3,6 +3,7 @@ from typing import List
 from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever as LC_BM25
 from utils.jsonl_utils import load_corpus_from_jsonl
+from utils.phoenix_tracing import trace_retrieval
 
 class BM25Retriever:
     """
@@ -20,6 +21,7 @@ class BM25Retriever:
         self.retriever: LC_BM25 = LC_BM25.from_documents(docs)
         self.retriever.k = k
 
+    @trace_retrieval(method="bm25")
     def similarity_search(self, query, k = None):
         if k is None:
             k = self.k

@@ -2,6 +2,7 @@ from typing import List
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from langchain_core.documents import Document
+from utils.phoenix_tracing import trace_rerank, trace_retrieval
 
 class CrossEncoderReranker:
     """
@@ -18,6 +19,7 @@ class CrossEncoderReranker:
         self.model.to(self.device)
         self.model.eval()
 
+    @trace_rerank
     def rerank(self, query, docs, top_k = 5):
         if not docs:
             return []
@@ -52,6 +54,7 @@ class RerankRetriever:
         self.reranker = reranker
         self.prefetch_k = prefetch_k
 
+    @trace_retrieval(method="rerank")
     def similarity_search(self, query, k = 5):
         pre_k = max(self.prefetch_k, k)
         base_docs = self.base_retriever.similarity_search(query, k=pre_k)

@@ -4,6 +4,7 @@ import torch
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from utils.phoenix_tracing import trace_retrieval
 
 class FaissRetriever:
     """
@@ -27,6 +28,7 @@ class FaissRetriever:
             allow_dangerous_deserialization=True,
         )
 
+    @trace_retrieval(method="faiss")
     def similarity_search(self, query, k = 5):
         return self.vector_store.similarity_search(query, k)
 

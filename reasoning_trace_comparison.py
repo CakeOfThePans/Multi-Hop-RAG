@@ -92,9 +92,9 @@ def main():
         )
         if tracer_provider:
             phoenix_url = get_phoenix_url()
-            print(f"\n📊 Phoenix observability enabled: {phoenix_url}\n")
+            print(f"\nPhoenix observability enabled: {phoenix_url}\n")
         else:
-            print("\n⚠️  Phoenix initialization failed. Continuing without observability.\n")
+            print("\nPhoenix initialization failed. Continuing without observability.\n")
 
     singlehop_model = SingleHopQA(
         retriever=base_retriever,

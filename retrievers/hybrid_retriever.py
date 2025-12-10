@@ -2,6 +2,7 @@ from typing import List, Tuple, Dict, Any
 from langchain_core.documents import Document
 from retrievers.faiss_retriever import FaissRetriever
 from retrievers.bm25_retriever import BM25Retriever
+from utils.phoenix_tracing import trace_retrieval
 
 class HybridRetriever:
     """
@@ -34,6 +35,7 @@ class HybridRetriever:
         fused = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
         return [entry["doc"] for entry in fused[:k]]
 
+    @trace_retrieval(method="hybrid")
     def similarity_search(self, query, k = 5):
         dense_docs = self.faiss_retriever.similarity_search(query, k=self.k_dense)
         sparse_docs = self.bm25_retriever.similarity_search(query, k=self.k_sparse)

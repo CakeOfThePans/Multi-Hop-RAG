@@ -76,7 +76,7 @@ class PhoenixManager:
             self._phoenix_url = f"http://{host}:{port}"
             self._is_initialized = True
             
-            print(f"✅ Phoenix initialized successfully")
+            print(f"Phoenix initialized successfully")
             print(f"   Project: {project_name}")
             print(f"   Server URL: {self._phoenix_url}")
             print(f"   Auto-instrumentation: {'enabled' if auto_instrument else 'disabled'}")
@@ -88,7 +88,7 @@ class PhoenixManager:
             return self.tracer_provider
             
         except Exception as e:
-            print(f"❌ Failed to initialize Phoenix: {e}")
+            print(f"Failed to initialize Phoenix: {e}")
             print("   Continuing without Phoenix observability...")
             print("   Make sure Phoenix server is running: phoenix serve")
             self._is_initialized = False
