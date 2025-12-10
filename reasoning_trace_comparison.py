@@ -10,6 +10,7 @@ from models.single_hop import SingleHopQA
 from models.multi_hop import MultiHopQA
 from retrievers.reranker import CrossEncoderReranker, RerankRetriever
 from utils.eval import f1_score, exact_match_score, llm_eval_score
+from utils.phoenix_config import initialize_phoenix, get_phoenix_url, shutdown_phoenix
 
 def load_validation_set(name):
     if name == "hotpot":
@@ -35,6 +36,17 @@ def main():
         "--rerank",
         action="store_true",
         help="Enable cross-encoder reranking on top of the chosen retriever.",
+    )
+    parser.add_argument(
+        "--phoenix",
+        action="store_true",
+        help="Enable Phoenix observability for tracing and error analysis.",
+    )
+    parser.add_argument(
+        "--phoenix_port",
+        type=int,
+        default=6006,
+        help="Port for Phoenix server (default: 6006)",
     )
 
     args = parser.parse_args()
@@ -69,6 +81,20 @@ def main():
         effective_retriever_name = f"{retrieval_mode}+rerank"
     else:
         effective_retriever_name = retrieval_mode
+
+    # Initialize Phoenix if requested
+    if args.phoenix:
+        project_name = f"{dataset_name}_{effective_retriever_name}_comparison"
+        tracer_provider = initialize_phoenix(
+            project_name=project_name,
+            port=args.phoenix_port,
+            auto_instrument=True,
+        )
+        if tracer_provider:
+            phoenix_url = get_phoenix_url()
+            print(f"\n📊 Phoenix observability enabled: {phoenix_url}\n")
+        else:
+            print("\n⚠️  Phoenix initialization failed. Continuing without observability.\n")
 
     singlehop_model = SingleHopQA(
         retriever=base_retriever,
@@ -111,6 +137,10 @@ def main():
     llm_eval = llm_eval_score(question, answer, multi_hop_pred)
     print("LLM Eval:", llm_eval["score"])
     print("LLM Eval Explanation:", llm_eval["explanation"]) # Optional
+
+    # Shutdown Phoenix if it was enabled
+    if args.phoenix:
+        shutdown_phoenix()
 
 if __name__ == "__main__":
     main()
