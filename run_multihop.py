@@ -8,6 +8,7 @@ from retrievers.hybrid_retriever import HybridRetriever
 from retrievers.reranker import CrossEncoderReranker, RerankRetriever
 from models.multi_hop import MultiHopQA
 from utils.eval import evaluate_qa_system
+from utils.phoenix_config import initialize_phoenix, get_phoenix_url, shutdown_phoenix
 
 def load_validation_set(name):
     if name == "hotpot":
@@ -32,6 +33,17 @@ def main():
         "--rerank",
         action="store_true",
         help="Enable cross-encoder reranking on top of the chosen retriever.",
+    )
+    parser.add_argument(
+        "--phoenix",
+        action="store_true",
+        help="Enable Phoenix observability for tracing and error analysis.",
+    )
+    parser.add_argument(
+        "--phoenix_port",
+        type=int,
+        default=6006,
+        help="Port for Phoenix server (default: 6006)",
     )
 
     args = parser.parse_args()
@@ -67,6 +79,20 @@ def main():
     else:
         effective_retriever_name = retrieval_mode
 
+    # Initialize Phoenix if requested
+    if args.phoenix:
+        project_name = f"{dataset_name}_{effective_retriever_name}_multihop"
+        tracer_provider = initialize_phoenix(
+            project_name=project_name,
+            port=args.phoenix_port,
+            auto_instrument=True,
+        )
+        if tracer_provider:
+            phoenix_url = get_phoenix_url()
+            print(f"\n📊 Phoenix observability enabled: {phoenix_url}\n")
+        else:
+            print("\n⚠️  Phoenix initialization failed. Continuing without observability.\n")
+
     model = MultiHopQA(
         retriever=base_retriever,
         chat_model="gpt-4.1-mini",
@@ -85,6 +111,10 @@ def main():
     print(f"DATASET: {dataset_name}")
     print(f"RETRIEVER: {effective_retriever_name}")
     print("RESULTS:", metrics)
+
+    # Shutdown Phoenix if it was enabled
+    if args.phoenix:
+        shutdown_phoenix()
 
 if __name__ == "__main__":
     main()

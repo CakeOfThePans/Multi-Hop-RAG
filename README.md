@@ -12,6 +12,7 @@ It supports:
 - Multi-hop RAG with question decomposition
 - EM, F1, and LLM semantic evaluation
 - Datasets: HotpotQA, MuSiQue, and 2WikiMultiHopQA
+- Self-hosted Arize Phoenix error visualization & analysis 
 
 ---
 
@@ -34,6 +35,7 @@ It supports:
 │   ├── prompts.py                  # All LLM prompts (single + multi-hop)
 │   ├── jsonl_utils.py              # Utilities for JSONL files (BM25)
 │   └── eval.py                     # EM/F1/LLM evaluation functions
+│   └── phoenix_config.py           # Configuration file for Phoenix server
 │
 ├── run_singlehop.py                # CLI runner for single-hop evaluation
 ├── run_multihop.py                 # CLI runner for multi-hop evaluation
@@ -150,7 +152,19 @@ You only need to run this once per dataset unless you change embeddings or chunk
 
 ---
 
-## Step 2 — Run Single-Hop RAG
+## Step 2 — Launch Phoenix Server
+
+Open a new window in your terminal.
+
+```bash
+phoenix serve
+```
+
+You will now be able to access your Phoenix server at localhost:6006 on any browser. 
+
+Return to your original window without closing the one you opened. Phoenix will now automatically update with a new project for every run executed.
+
+## Step 3 — Run Single-Hop RAG
 
 ```bash
 python run_singlehop.py
@@ -166,16 +180,19 @@ python run_singlehop.py
 | `--n_eval` | Number of validation samples | `100` |
 | `--index_dir` | Path to FAISS indexes | `vector_stores` |
 | `--rerank` | Enable cross-encoder reranking | `false` |
+| `--phoenix` | Enable Phoenix observability system | `false` |
+| `--phoenix_port` | Determine Phoenix server location | `6006` |
 
 ### Example
 
 ```bash
-python run_singlehop.py --retrieval_mode hybrid --dataset_name 2wiki --k_retrieve 5 --n_eval 50 --rerank
+python run_singlehop.py --phoenix --retrieval_mode hybrid --dataset_name 2wiki --k_retrieve 5 --n_eval 50 --rerank
 ```
 
 This prints:
 - Each validation question, response, and ground truth.
 - Final performance results.
+- Updates each trace to a Phoenix dashboard.
 
 ---
 
@@ -200,16 +217,19 @@ Uses:
 | `--n_eval` | Number of validation samples | `100` |
 | `--index_dir` | Path to FAISS indexes | `vector_stores` |
 | `--rerank` | Enable cross-encoder reranking | `false` |
+| `--phoenix` | Enable Phoenix observability system | `false` |
+| `--phoenix_port` | Determine Phoenix server location | `6006` |
 
 ### Example
 
 ```bash
-python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10 --rerank
+python run_multihop.py --phoenix --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10 --rerank
 ```
 
 This prints:
 - Each validation question, response, and ground truth.
 - Final performance results.
+- Updates each trace to a Phoenix dashboard.
 
 ---
 
