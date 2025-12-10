@@ -89,9 +89,9 @@ def main():
         )
         if tracer_provider:
             phoenix_url = get_phoenix_url()
-            print(f"\n📊 Phoenix observability enabled: {phoenix_url}\n")
+            print(f"\nPhoenix observability enabled: {phoenix_url}\n")
         else:
-            print("\n⚠️  Phoenix initialization failed. Continuing without observability.\n")
+            print("\nPhoenix initialization failed. Continuing without observability.\n")
 
     model = SingleHopQA(
         retriever=base_retriever,
@@ -104,11 +104,54 @@ def main():
     def predict_fn(question, k):
         return model.predict(question, k=k)
 
-    metrics = evaluate_qa_system(ds_val, predict_fn, n=n_eval, k=k_retrieve)
+    # Evaluate with Phoenix tracing and error categorization
+    metrics = evaluate_qa_system(
+        ds_val,
+        predict_fn,
+        n=n_eval,
+        k=k_retrieve,
+        dataset_name=dataset_name,
+        retrieval_mode=effective_retriever_name,
+        architecture="single_hop",
+        export_data=args.phoenix,  # Export data if Phoenix is enabled
+    )
 
     print(f"Dataset: {dataset_name}")
     print(f"Retriever: {effective_retriever_name}")
     print("Results:", metrics)
+    
+    # Export evaluation data to Phoenix if enabled
+    if args.phoenix and "eval_data" in metrics:
+        from utils.phoenix_export import export_evaluation_to_phoenix, export_evaluation_summary
+        
+        eval_data = metrics["eval_data"]
+        df = export_evaluation_to_phoenix(
+            questions=eval_data["questions"],
+            predictions=eval_data["predictions"],
+            ground_truths=eval_data["ground_truths"],
+            em_scores=eval_data["em_scores"],
+            f1_scores=eval_data["f1_scores"],
+            llm_scores=eval_data["llm_scores"],
+            error_categories=eval_data["error_categories"],
+            dataset_name=dataset_name,
+            retrieval_mode=effective_retriever_name,
+            architecture="single_hop",
+            llm_explanations=eval_data.get("llm_explanations"),
+        )
+        
+        if df is not None:
+            summary = export_evaluation_summary(
+                eval_data,
+                dataset_name,
+                effective_retriever_name,
+                "single_hop",
+            )
+            print(f"\nError Analysis Summary:")
+            print(f"   Total Samples: {summary['total_samples']}")
+            print(f"   Correct: {summary['correct']} ({100*(1-summary['error_rate']):.1f}%)")
+            print(f"   Error Rate: {100*summary['error_rate']:.1f}%")
+            print(f"   Top Error Category: {summary['top_error_category']}")
+            print(f"   Error Distribution: {summary['error_distribution']}")
 
     # Shutdown Phoenix if it was enabled
     if args.phoenix:
