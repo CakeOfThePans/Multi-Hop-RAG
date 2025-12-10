@@ -173,6 +173,10 @@ python run_singlehop.py
 python run_singlehop.py --retrieval_mode hybrid --dataset_name 2wiki --k_retrieve 5 --n_eval 50 --rerank
 ```
 
+This prints:
+- Each validation question, response, and ground truth.
+- Final performance results.
+
 ---
 
 ## Step 3 — Run Multi-Hop RAG
@@ -202,6 +206,10 @@ Uses:
 ```bash
 python run_multihop.py --retrieval_mode faiss --dataset_name hotpot --k_retrieve 5 --n_eval 10 --rerank
 ```
+
+This prints:
+- Each validation question, response, and ground truth.
+- Final performance results.
 
 ---
 
